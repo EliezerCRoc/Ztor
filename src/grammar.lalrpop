@@ -1,0 +1,385 @@
+use crate::parser::tokens::{Token, LexicalError};
+use crate::ast;
+
+grammar;
+
+extern {
+  type Location = usize;
+  type Error = LexicalError;
+
+  enum Token {
+    "program" => Token::KeywordProgram,
+    "main" => Token::KeywordMain,
+    "end" => Token::KeywordEnd,
+
+    "identifier" => Token::Identifier(<String>),
+
+    "var" => Token::KeywordVar,
+    "print" => Token::KeywordPrint,
+    "void" => Token::KeywordVoid,
+
+    "if" => Token::KeywordIf,
+    "else" => Token::KeywordElse,
+    "do" => Token::KeywordDo,
+
+    "while" => Token::KeywordWhile,
+
+    "KeywordInt" => Token::KeywordInt,
+    "KeywordFloat" => Token::KeywordFloat,
+
+    "KeywordCTEInt" => Token::KeywordCTEInt,
+    "KeywordCTEFloat" => Token::KeywordCTEFloat,
+    "cte.string" => Token::CteString,
+
+    "int" => Token::Integer(<i64>),
+    "float" => Token::Float(<f64>),
+    "(" => Token::LParen,
+    ")" => Token::RParen,
+    "{" => Token::LBracket,
+    "}" => Token::RBracket,
+    "[" => Token::LSQRBracket,
+    "]" => Token::RSQRBracket,
+    "=" => Token::Assign,
+    ";" => Token::Semicolon,
+    ":" => Token::Colon,
+    "," => Token::Comma,
+
+    "+" => Token::OperatorAdd,
+    "-" => Token::OperatorSub,
+    "*" => Token::OperatorMul,
+    "/" => Token::OperatorDiv,
+
+    "\"" => Token::Quote,
+
+
+    ">" => Token::BiggerThan,
+    "<" => Token::LessThan,
+    "!=" => Token::NotEqual,
+  }
+}
+
+// Top-level parse
+pub Script: Vec<String> = {
+  <start:Program> => start
+}
+
+// El programa es Header, DecVars, DecFuncs
+pub Program: Vec<String> = {
+  <header:Header> <vars:DecVars> <funcs:DecFuncs> "main" <body:Body> "end" => {
+    let mut v = vec![header];
+    v.extend(vars);
+    v.extend(funcs);
+    v.extend(body);
+
+    v
+  }
+}
+
+//Header Inicial
+Header: String = {
+  "program" <id:"identifier"> ";" => {
+    format!("ProgramDeclaration({})", id)
+  }
+}
+
+// Body
+
+Body: Vec<String> = {
+  "{" <state:DecStatement> "}" => {
+    let v = state;
+    v
+  }
+}
+
+// Statement
+
+DecStatement: Vec<String> = {
+  => vec![],
+  <assign:Assign><ds:DecStatement> => vec![assign],
+  <condition:Condition><ds:DecStatement> => vec![condition],
+  <cycle:Cycle><ds:DecStatement> => vec![cycle],
+  <fCall:FCall><ds:DecStatement> => vec![fCall],
+  <print:Print><ds:DecStatement> => vec![print]
+
+}
+
+Assign: String = {
+  <id: "identifier"> "=" <exp:Expresion> ";" => {
+    format!("Asignacion({}, {})", id, exp)
+  }
+}
+
+Condition: String = {
+  "if" "(" <exp:Expresion> ")" "do" <b:Body> <e:Else> ";" => {
+    format!("Condicion({}, {})", exp,  e )
+  }
+}
+
+Else: String = {
+  => "None Else".to_string(),
+  "else" <b:Body> => format!("Else()")
+}
+
+Cycle: String = {
+  "while" "(" <exp:Expresion> ")" "do" <b:Body> ";" => {
+    format!("Cycle({})", exp)
+  }
+}
+
+FCall: String = {
+  <id: "identifier"> "(" <de:DecExpresion> ")" ";"=> {
+    format!("FCall({})", id)
+  }
+}
+
+Print: String = {
+  "print" "(" <pt:PrintTipo> ")" ";"=> {
+    format!("Print({})", pt)
+  }
+}
+
+PrintTipo: String = {
+  <exp:Expresion><pe:PrintExtra> => {
+     exp
+  },
+  <val:"cte.string"> <pe:PrintExtra> => {
+     "String".to_string()
+  }
+}
+
+PrintExtra: String = {
+  => "".to_string(),
+  "," <print:PrintTipo> => {
+     print
+  }
+}
+// Variables
+
+
+pub DecVars: Vec<String> = {
+  => vec![],
+  <var:Vars> <rest:DecVars> => {
+    let mut v = vec![var];
+    v.extend(rest);
+    v
+  }
+}
+
+
+Vars: String = {
+  "var" <var:Variable> ":" <value:Type> ";" => {
+    format!("DeclaracionVariable({}, {})", var, value)
+  }
+}
+
+Variable: String = {
+  <name:"identifier"> <more:MASIDS> => {
+    if more.is_empty() {
+      name
+    } else {
+      format!("{}{}", name, more)
+    }
+  }
+}
+
+MASIDS: String = {
+  => "".to_string(),
+  "," <name:"identifier"> <more:MASIDS> => {
+    format!(", {}{}", name, more)
+  }
+}
+
+// Funciones
+
+// Funciones: cero o más
+pub DecFuncs: Vec<String> = {
+  => vec![],
+  <func:Funcs> <rest:DecFuncs> => {
+    let mut v = vec![func];
+    v.extend(rest);
+    v
+  }
+}
+
+// Una función
+Funcs: String = {
+  "void" <name:"identifier"> "(" <params:DecParametros> ")" "[" <vars:DecVars> <body:Body> "]" ";" => {
+    format!("DeclaracionFuncion({}, {:?}, {:?}, {:?})", name, params, vars, body)
+  }
+}
+
+// Parametros
+
+DecParametros: Vec<String> = {
+  => vec![],
+  <p:Param> <rest:MASPARAMS> => {
+    let mut v = vec![p];
+    v.extend(rest);
+    v
+  }
+}
+
+Param: String = {
+  <name:"identifier"> ":" <value:Type> => {
+    format!("Parametro({}, {})", name, value)
+  }
+}
+
+MASPARAMS: Vec<String> = {
+  => vec![],
+  "," <p:Param> <rest:MASPARAMS> => {
+    let mut v = vec![p];
+    v.extend(rest);
+    v
+  }
+}
+
+// DecExpresion maneja listas separadas por coma
+DecExpresion: Vec<String> = {
+  => vec![],
+  <exp:Expresion> <rest:MASEXPRESIONES> => {
+    let mut v = vec![exp];
+    v.extend(rest);
+    v
+  }
+}
+
+MASEXPRESIONES: Vec<String> = {
+  => vec![],
+  "," <exp:Expresion> <rest:MASEXPRESIONES> => {
+    let mut v = vec![exp];
+    v.extend(rest);
+    v
+  }
+}
+
+// Expresion 
+Expresion: String = {
+  <exp:EXP> <tipo:TipoExp> => {
+    format!("Expresion({}, {})", exp, tipo)
+  }
+}
+
+// Operadores relacionales
+TipoExp: String = {
+  => "None".to_string(),
+  ">" <exp:EXP> => format!("Relacional(>, {})", exp),
+  "<" <exp:EXP> => format!("Relacional(<, {})", exp),
+  "!=" <exp:EXP> => format!("Relacional(!=, {})", exp),
+}
+
+// Expresión aritmética básica
+EXP: String = {
+  <lhs:Termino> <rhs:TerminoDerecha> => {
+    if rhs.is_empty() {
+      lhs
+    } else {
+      format!("Aritmetica({}, {})", lhs, rhs)
+    }
+  }
+}
+
+// Un solo término
+Termino: String = {
+  <lhs:Factor><rhs:FactorDerecha> => {
+    if rhs.is_empty() {
+      lhs
+    } else {
+      format!("Termino({}, {})", lhs, rhs)
+    }
+  }
+}
+
+// Operadores aritméticos
+TerminoDerecha: String = {
+  => "".to_string(),
+  "+" <t:Termino> => format!("+{}", t),
+  "-" <t:Termino> => format!("-{}", t),
+}
+
+FactorDerecha: String = {
+  => "".to_string(),
+  "*" <f:Factor> => format!("*{}", f),
+  "/" <f:Factor> => format!("/{}", f),
+}
+
+// Factores
+Factor: String = {
+  "(" <exp:Expresion> ")" => format!("Paren({})", exp),
+  <signo:FactorSigno> <val:FactorValor> => format!("Factor({}, {})", signo, val)
+}
+
+// Opcionalmente signo + o -
+FactorSigno: String = {
+  => "".to_string(),
+  "+" => "Pos".to_string(),
+  "-" => "Neg".to_string(),
+}
+
+// Identificador o constante
+FactorValor: String = {
+  <id:"identifier"> => format!("Id({})", id),
+  <cte:CTE> => cte,
+}
+
+// Constantes
+pub CTE: String = {
+  <i:"int"> => format!("IntConst({})", i),
+  <f:"float"> => format!("FloatConst({})", f),
+}
+
+
+// Tipos
+pub Type: String = {
+  "KeywordInt" => "Int".to_string(),
+  "KeywordFloat" => "Float".to_string(),
+}
+
+// Expresiones aritméticas
+pub Expression: Box<ast::Expression> = {
+  #[precedence(level="1")]
+  Term,
+
+  #[precedence(level="2")] #[assoc(side="left")]
+  <lhs:Expression> "*" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Mul,
+      rhs
+    })
+  },
+  <lhs:Expression> "/" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Div,
+      rhs
+    })
+  },
+
+  #[precedence(level="3")] #[assoc(side="left")]
+  <lhs:Expression> "+" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Add,
+      rhs
+    })
+  },
+  <lhs:Expression> "-" <rhs:Expression> => {
+    Box::new(ast::Expression::BinaryOperation {
+      lhs,
+      operator: ast::Operator::Sub,
+      rhs
+    })
+  },
+}
+
+// Literales y variables
+pub Term: Box<ast::Expression> = {
+  <val:"int"> => {
+    Box::new(ast::Expression::Integer(val))
+  },
+  <name:"identifier"> => {
+    Box::new(ast::Expression::Variable(name))
+  },
+  "(" <e:Expression> ")" => e,
+}

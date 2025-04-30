@@ -1,6 +1,16 @@
 [package]
 name = "Ztor"
 version = "0.1.0"
+authors = ["Eliezer Cavazos <eliezerc.roc@gmail.com>"]
 edition = "2024"
 
+[build-dependencies] # <-- We added this and everything after!
+lalrpop = "0.22.1"
+
 [dependencies]
+lalrpop-util = { version = "0.22.1", features = ["lexer", "unicode"] }
+regex = "1"
+logos = "0.15.0"
+
+[dev-dependencies]
+rstest = "0.25.0"

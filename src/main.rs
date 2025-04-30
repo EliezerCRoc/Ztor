@@ -1,46 +1,47 @@
-mod utils;
+#[macro_use]
+extern crate lalrpop_util;
+use lalrpop_util::lalrpop_mod;
+
+
+mod parser;
+mod ast;
+lalrpop_mod!(#[allow(clippy::all)] pub grammar); // synthesized by LALRPOP
+
+
+use parser::lexer::Lexer;
+use crate::grammar::ProgramParser;
+
+/*mod utils;
 use utils::stack::Stack;
 use utils::queue::Queue;
 use std::collections::HashMap; //Libreria para el uso de Hashmap es mejor usarla que implementarlo de 0
+*/
+
+
 
 fn main() {
-    //Stack
-    let mut stack = Stack::new();
+    let source_code = "    program a123;  
+                            var a,b : int;
+                            var c,d : float;
+                            void func1(a : int, b : int)[
+                                var c,d : float;
+                                {
+                                    print(a, b, ((c + d) + 5));
+                                }
+                            ];
+                            main
+                            {
+                                if(a > (c + d)) do
+                                {
+                                    func1(a, b);                                
+                                };
+                                b = 1;
+                            }
+                            end";
+    let lexer = Lexer::new(&source_code);
 
-    stack.push("prueba Stack");
-    stack.pop();
-    stack.push("prueba2 Stack");
-    stack.push("prueba Stack");
+    let parser = ProgramParser::new();
+    let ast = parser.parse(lexer);
 
-
-    println!("{:?}",stack.top.unwrap().data);
-
-    //Queue
-
-    let mut queue = Queue::new();
-
-    // Add some items
-    queue.enqueue("Prueba");
-    queue.enqueue("valor2");
-    queue.enqueue("3"); 
-
-    
-    println!("Antes de dequeue: {:?}",queue.peek());
-    
-
-    // Remove an item
-    queue.dequeue();
-
-    // Check results
-    println!("Despues dequeue {:?}",queue.peek());
-
-    //HashMap
-    let mut oHashMap = HashMap::new();
-    oHashMap.insert("llave1", "valor1");
-    oHashMap.insert("llave2", "valor2");
-    oHashMap.insert("llave3", "valor3");
-    println!("Found word:  {:?}", Some(oHashMap.get("llave1") ));
-
-
-   
+    println!("{:?}", ast.unwrap());
 }
