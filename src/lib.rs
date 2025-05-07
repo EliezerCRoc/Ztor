@@ -7,6 +7,7 @@ use lalrpop_util::lalrpop_mod;
 
 pub mod parser;
 pub mod ast;
+pub mod directory;
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 

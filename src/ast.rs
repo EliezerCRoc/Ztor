@@ -4,7 +4,6 @@ use std::collections::{HashMap, VecDeque};
 
 
 #[derive(Clone, Debug, PartialEq)]
-
 pub enum Header {
     Program {id: String}
 }
@@ -14,8 +13,6 @@ pub enum Statement {
   Variable { name: String, value: Box<Expression> },
   Print { value: Box<Expression> },
 }
-
-
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
