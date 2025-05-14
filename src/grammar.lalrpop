@@ -1,10 +1,18 @@
 use crate::parser::tokens::{Token, LexicalError};
 use std::collections::HashMap;
-use crate::directory::{FunctionDirectory, FunctionInfo};
+use crate::memory::directory::{FunctionDirectory, FunctionInfo};
+use crate::memory::variables::VariableValueTable;
+use crate::semantic::datatype::{DataType, Value, Operator};
+use crate::semantic::quadruples::QuadrupleList;
+use crate::ast::Expression;
+
+
 use crate::ast;
 
 
-grammar;
+grammar<'input>(oFuncDirectory:&'input mut FunctionDirectory, 
+                oVariableValueTable:&'input mut VariableValueTable,
+                oQuadrupleList:&'input mut QuadrupleList,);
 
 extern {
   type Location = usize;
@@ -56,25 +64,33 @@ extern {
 }
 
 // Top-level parse
-pub Script: Box<FunctionDirectory> = {
-  <start:Program> => start
+pub Script: () = {
+  <start:Program> => ()
 }
 
 // El programa es Header, DecVars, DecFuncs y por ultimo Body
-pub Program: Box<FunctionDirectory> = {
+pub Program: () = {
   <header:Header> <vars:DecVars> <funcs:DecFuncs> "main" <body:Body> "end" => {
-    //Crea directorio de funciones
-    let mut oFuncDirectory = FunctionDirectory::new();
 
      // Crea la función main
     let mut oFunctionInfoMain = FunctionInfo::new("void".to_string());
 
-    for (sName, sType) in vars {
+    for (sName, oType) in vars {
         if oFunctionInfoMain.oVariableDirectory.contains_key(&sName) {
             panic!("Variable '{}' already declared", sName); // Validación
         }      
+        let mut iIndex = usize::MIN;
+        match *oType {
+            DataType::Int => {iIndex =  oVariableValueTable.set(Value::Int(0), *oType)},
+            DataType::Float => {iIndex =  oVariableValueTable.set(Value::Float(0.0), *oType)},
+            DataType::Bool => {iIndex =  oVariableValueTable.set(Value::Bool(false), *oType)}
+        };
+         
 
-        oFunctionInfoMain.oVariableDirectory.insert(sName, sType);
+
+        oFunctionInfoMain.oVariableDirectory.insert(sName, iIndex);
+
+
     }
     //Genera tabla de variables de la funcion main y  se guarda en mi directorio de funciones
     oFuncDirectory.oFunctions.insert("main".to_string(), oFunctionInfoMain);
@@ -83,20 +99,12 @@ pub Program: Box<FunctionDirectory> = {
         if oFuncDirectory.oFunctions.contains_key(&sFuncName) {
             panic!("Function '{}' already declared", sFuncName); // Validación
         }      
-        // Validar variables globales con variables de funciones (habra alguna manera que sea mas eficiente?) 
-        for sVarName in oFunctInfo.oVariableDirectory.keys() {
-            if oFuncDirectory.oFunctions["main"].oVariableDirectory.contains_key(sVarName) {
-                panic!(
-                    "Variable '{}' in function '{}' already exists as a global variable.",
-                    sVarName, sFuncName
-                );
-            }
-        }
-
         oFuncDirectory.oFunctions.insert(sFuncName, oFunctInfo);
     }
-    Box::new(oFuncDirectory)
 
+
+    //Box::new(oFuncDirectory)
+    ()
 
   }
 }
@@ -130,13 +138,13 @@ DecStatement: Vec<String> = {
 
 Assign: String = {
   <id: "identifier"> "=" <exp:Expresion> ";" => {
-    format!("Asignacion({}, {})", id, exp)
+    format!("Asignacion( {})", id)
   }
 }
 
 Condition: String = {
   "if" "(" <exp:Expresion> ")" "do" <b:Body> <e:Else> ";" => {
-    format!("Condicion({}, {})", exp,  e )
+    format!("Condicion( {})",  e )
   }
 }
 
@@ -147,7 +155,7 @@ Else: String = {
 
 Cycle: String = {
   "while" "(" <exp:Expresion> ")" "do" <b:Body> ";" => {
-    format!("Cycle({})", exp)
+    format!("Cycle()")
   }
 }
 
@@ -165,7 +173,7 @@ Print: String = {
 
 PrintTipo: String = {
   <exp:Expresion><pe:PrintExtra> => {
-     exp
+      "Expresion".to_string()
   },
   <val:"cte.string"> <pe:PrintExtra> => {
      "String".to_string()
@@ -181,7 +189,7 @@ PrintExtra: String = {
 
 // Variables
 
-pub DecVars: Vec<(String,String)> = {
+pub DecVars: Vec<(String,Box<DataType>)> = {
   => vec![],
   <var:Vars> <rest:DecVars> => {
     let mut v = var;
@@ -190,7 +198,7 @@ pub DecVars: Vec<(String,String)> = {
   }
 }
 
-Vars: Vec<(String, String)> = {
+Vars: Vec<(String, Box<DataType>)> = {
   "var" <vars:Variable> ":" <tpe:Type> ";" => {
     //Para cada id de vars va a generar un valor en el vector con (id, type)
     vars.into_iter().map(|id| (id, tpe.clone())).collect()
@@ -236,12 +244,12 @@ Funcs: Vec<(String, FunctionInfo)> = {
     let mut v = params;
     v.extend(vars);
     // Declaracion parametros y variables dentro de funcion
-    for (sName, sType) in v {
+    for (sName, oType) in v {
         if oFunctionInfo.oVariableDirectory.contains_key(&sName) {
             panic!("Variable '{}' already declared", sName); // Validación
         }      
 
-        oFunctionInfo.oVariableDirectory.insert(sName, sType);
+        oFunctionInfo.oVariableDirectory.insert(sName, usize::MIN);
     }
 
     vec![(name,oFunctionInfo)]
@@ -250,7 +258,7 @@ Funcs: Vec<(String, FunctionInfo)> = {
 
 // Parametros
 
-DecParametros: Vec<(String, String)> = {
+DecParametros: Vec<(String, Box<DataType>)> = {
   => vec![],
   <p:Param> <rest:MASPARAMS> => {
     let mut v = p;
@@ -259,13 +267,13 @@ DecParametros: Vec<(String, String)> = {
   }
 }
 
-Param: Vec<(String, String)> = {
+Param: Vec<(String, Box<DataType>)> = {
   <id:"identifier"> ":" <tpe:Type> => {
     vec![(id, tpe)]
   }
 }
 
-MASPARAMS: Vec<(String, String)> = {
+MASPARAMS: Vec<(String, Box<DataType>)> = {
   => vec![],
   "," <p:Param> <rest:MASPARAMS> => {
     let mut v = p;
@@ -274,8 +282,8 @@ MASPARAMS: Vec<(String, String)> = {
   }
 }
 
-// DecExpresion maneja listas separadas por coma
-DecExpresion: Vec<String> = {
+
+DecExpresion: Vec<Expression> = {
   => vec![],
   <exp:Expresion> <rest:MASEXPRESIONES> => {
     let mut v = vec![exp];
@@ -284,7 +292,7 @@ DecExpresion: Vec<String> = {
   }
 }
 
-MASEXPRESIONES: Vec<String> = {
+MASEXPRESIONES: Vec<Expression> = {
   => vec![],
   "," <exp:Expresion> <rest:MASEXPRESIONES> => {
     let mut v = vec![exp];
@@ -293,132 +301,149 @@ MASEXPRESIONES: Vec<String> = {
   }
 }
 
+
 // Expresion 
-Expresion: String = {
-  <exp:EXP> <tipo:TipoExp> => {
-    format!("Expresion({}, {})", exp, tipo)
-  }
-}
+Expresion: Expression = {
+    <lhs:EXP> <rel:TipoExp> => match rel {
+        Some((op, right)) => Expression::BinaryOperation {
+            left: Box::new(lhs),
+            operator: op,
+            right: Box::new(right),
+        },
+        None => lhs,
+    },
+};
+
 
 // Operadores relacionales
-TipoExp: String = {
-  => "None".to_string(),
-  ">" <exp:EXP> => format!("Relacional(>, {})", exp),
-  "<" <exp:EXP> => format!("Relacional(<, {})", exp),
-  "!=" <exp:EXP> => format!("Relacional(!=, {})", exp),
-}
+TipoExp: Option<(Operator, Expression)> = {
+    => None,
+    ">" <exp:EXP> => Some((Operator::GreaterThan, exp)),
+    "<" <exp:EXP> => Some((Operator::LessThan, exp)),
+    "!=" <exp:EXP> => Some((Operator::NotEqual, exp)),
+};
 
 // Expresión aritmética básica
-EXP: String = {
+EXP: Expression = {
   <lhs:Termino> <rhs:TerminoDerecha> => {
-    if rhs.is_empty() {
-      lhs
-    } else {
-      format!("Aritmetica({}, {})", lhs, rhs)
+    match rhs {
+      Some((op, right)) => Expression::BinaryOperation{ left: Box::new(lhs),
+            operator: op,
+            right: Box::new(right),
+            },
+      None => lhs
     }
   }
 }
 
 // Un solo término
-Termino: String = {
-  <lhs:Factor><rhs:FactorDerecha> => {
-    if rhs.is_empty() {
-      lhs
-    } else {
-      format!("Termino({}, {})", lhs, rhs)
-    }
-  }
-}
+Termino: Expression = {
+    <lhs:Factor> <rhs:FactorDerecha> => match rhs {
+        Some((op, right)) => Expression::BinaryOperation {
+            left: Box::new(lhs),
+            operator: op,
+            right: Box::new(right),
+        },
+        None => lhs,
+    },
+};
 
-// Operadores aritméticos
-TerminoDerecha: String = {
-  => "".to_string(),
-  "+" <t:Termino> => format!("+{}", t),
-  "-" <t:Termino> => format!("-{}", t),
-}
 
-FactorDerecha: String = {
-  => "".to_string(),
-  "*" <f:Factor> => format!("*{}", f),
-  "/" <f:Factor> => format!("/{}", f),
-}
+TerminoDerecha: Option<(Operator, Expression)> = {
+    => None,
+    "+" <t:Termino> => Some((Operator::Add, t)),
+    "-" <t:Termino> => Some((Operator::Sub, t)),
+};
+
+
+FactorDerecha: Option<(Operator, Expression)> = {
+    => None,
+    "*" <f:Factor> => Some((Operator::Mul, f)),
+    "/" <f:Factor> => Some((Operator::Div, f)),
+};
+
 
 // Factores
-Factor: String = {
-  "(" <exp:Expresion> ")" => format!("Paren({})", exp),
-  <signo:FactorSigno> <val:FactorValor> => format!("Factor({}, {})", signo, val)
-}
+Factor: Expression = {
+    "(" <e:Expresion> ")" => e,
+    <sign:FactorSigno> <val:FactorValor> => match sign {
+        Some(operator) => Expression::UnaryOperation { operator, expr: Box::new(val) },
+        None => val,
+    },
+};
 
-// Opcionalmente signo + o -
-FactorSigno: String = {
-  => "".to_string(),
-  "+" => "Pos".to_string(),
-  "-" => "Neg".to_string(),
-}
+
+FactorSigno: Option<Operator> = {
+    => None,
+    "+" => Some(Operator::Add),
+    "-" => Some(Operator::Sub),
+};
+
 
 // Identificador o constante
-FactorValor: String = {
-  <id:"identifier"> => format!("Id({})", id),
-  <cte:CTE> => cte,
-}
+FactorValor: Expression = {
+    <id:"identifier"> => Expression::Identifier(id.to_string()),
+    <cte:CTE> => cte,
+};
+
 
 // Constantes
-pub CTE: String = {
-  <i:"int"> => format!("IntConst({})", i),
-  <f:"float"> => format!("FloatConst({})", f),
+pub CTE: Expression = {
+  <i:"int"> => Expression::Constant(Value::Int(i)),
+  <f:"float"> => Expression::Constant(Value::Float(f)),
 }
 
 // Tipos
-pub Type: String = {
-  "KeywordInt" => "Int".to_string(),
-  "KeywordFloat" => "Float".to_string(),
+pub Type: Box<DataType> = {
+  "KeywordInt" => Box::new(DataType::Int),
+  "KeywordFloat" => Box::new(DataType::Float),
 }
 
-// Expresiones aritméticas
-pub Expression: Box<ast::Expression> = {
-  #[precedence(level="1")]
-  Term,
+// // Expresiones aritméticas
+// pub Expression: Box<ast::Expression> = {
+//   #[precedence(level="1")]
+//   Term,
 
-  #[precedence(level="2")] #[assoc(side="left")]
-  <lhs:Expression> "*" <rhs:Expression> => {
-    Box::new(ast::Expression::BinaryOperation {
-      lhs,
-      operator: ast::Operator::Mul,
-      rhs
-    })
-  },
-  <lhs:Expression> "/" <rhs:Expression> => {
-    Box::new(ast::Expression::BinaryOperation {
-      lhs,
-      operator: ast::Operator::Div,
-      rhs
-    })
-  },
+//   #[precedence(level="2")] #[assoc(side="left")]
+//   <lhs:Expression> "*" <rhs:Expression> => {
+//     Box::new(ast::Expression::BinaryOperation {
+//       lhs,
+//       operator: ast::Operator::Mul,
+//       rhs
+//     })
+//   },
+//   <lhs:Expression> "/" <rhs:Expression> => {
+//     Box::new(ast::Expression::BinaryOperation {
+//       lhs,
+//       operator: ast::Operator::Div,
+//       rhs
+//     })
+//   },
 
-  #[precedence(level="3")] #[assoc(side="left")]
-  <lhs:Expression> "+" <rhs:Expression> => {
-    Box::new(ast::Expression::BinaryOperation {
-      lhs,
-      operator: ast::Operator::Add,
-      rhs
-    })
-  },
-  <lhs:Expression> "-" <rhs:Expression> => {
-    Box::new(ast::Expression::BinaryOperation {
-      lhs,
-      operator: ast::Operator::Sub,
-      rhs
-    })
-  },
-}
+//   #[precedence(level="3")] #[assoc(side="left")]
+//   <lhs:Expression> "+" <rhs:Expression> => {
+//     Box::new(ast::Expression::BinaryOperation {
+//       lhs,
+//       operator: ast::Operator::Add,
+//       rhs
+//     })
+//   },
+//   <lhs:Expression> "-" <rhs:Expression> => {
+//     Box::new(ast::Expression::BinaryOperation {
+//       lhs,
+//       operator: ast::Operator::Sub,
+//       rhs
+//     })
+//   },
+// }
 
-// Literales y variables
-pub Term: Box<ast::Expression> = {
-  <val:"int"> => {
-    Box::new(ast::Expression::Integer(val))
-  },
-  <name:"identifier"> => {
-    Box::new(ast::Expression::Variable(name))
-  },
-  "(" <e:Expression> ")" => e,
-}
+// // Literales y variables
+// pub Term: Box<ast::Expression> = {
+//   <val:"int"> => {
+//     Box::new(ast::Expression::Integer(val))
+//   },
+//   <name:"identifier"> => {
+//     Box::new(ast::Expression::Variable(name))
+//   },
+//   "(" <e:Expression> ")" => e,
+// }

@@ -3,11 +3,18 @@ extern crate lalrpop_util;
 use lalrpop_util::lalrpop_mod;
 mod parser;
 mod ast;
-mod directory;
+mod memory;
+mod semantic;
+mod utils;
 lalrpop_mod!(#[allow(clippy::all)] pub grammar); // synthesized by LALRPOP
 
+use memory::directory::{FunctionDirectory, FunctionInfo};
+use memory::variables::VariableValueTable;
 use parser::lexer::Lexer;
+use crate::semantic::quadruples::QuadrupleList;
 use crate::grammar::ProgramParser;
+use crate::semantic::datatype::{DataType, Operator, Value};
+
 
 /*mod utils;
 use utils::stack::Stack;
@@ -16,15 +23,15 @@ use std::collections::HashMap; //Libreria para el uso de Hashmap es mejor usarla
 */
 
 fn main() {
+    let mut oFuncDirectory = FunctionDirectory::new();
+    let mut oVariableValueTable = VariableValueTable::new();
+    let mut oQuadrupleList = QuadrupleList::new();
+
+
+
     let source_code = "    program prueba1;  
                             var a,b : int;
                             var c,d : float;
-                            void func1(param1 : int, param2 : int)[
-                                var a : float;
-                                {
-                                    print(a, b, ((c + d) + 5));
-                                }
-                            ];
                             main
                             {
                                 if(a > (c * d) ) do
@@ -34,10 +41,13 @@ fn main() {
                                 b = 1;
                             }
                             end";
+
     let lexer = Lexer::new(&source_code);
 
     let parser = ProgramParser::new();
-    let ast = parser.parse(lexer);
+    parser.parse(& mut oFuncDirectory, & mut oVariableValueTable, & mut oQuadrupleList, lexer);
 
-    println!("{:?}", ast.unwrap());
+    println!("{:?}", oFuncDirectory);
+    println!("{:?}", oVariableValueTable.get(oFuncDirectory.oFunctions["main"].oVariableDirectory["b"]));
+
 }

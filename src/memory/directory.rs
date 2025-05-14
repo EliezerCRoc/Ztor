@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use crate::semantic::datatype::DataType;
 
 #[derive(Debug)]
 pub struct FunctionDirectory {
@@ -13,12 +14,10 @@ impl FunctionDirectory {
     }
 }
 
-
-
 #[derive(Debug)]
 pub struct FunctionInfo {
     pub sReturnType: String,
-    pub oVariableDirectory: HashMap<String, String>, // Tabla de Variables (Nombre, Tipo)
+    pub oVariableDirectory: HashMap<String, usize>, // Tabla de Variables (Nombre, Espacio Memoria)
 }
 
 impl FunctionInfo {

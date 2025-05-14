@@ -7,10 +7,18 @@ use lalrpop_util::lalrpop_mod;
 
 pub mod parser;
 pub mod ast;
-pub mod directory;
+pub mod memory;
+pub mod semantic;
+pub mod utils;
+
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 
 // Re-exporta el lexer y el parser
 pub use parser::lexer::Lexer;
 pub use grammar::ProgramParser;
+pub use memory::directory::FunctionDirectory;
+pub use memory::variables::VariableValueTable;
+pub use semantic::datatype::{DataType, Value};
+pub use utils::stack::Stack;
+pub use semantic::quadruples::QuadrupleList;

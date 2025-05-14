@@ -1,6 +1,7 @@
 use core::fmt;
 use core::fmt::Error;
 use std::collections::{HashMap, VecDeque};
+use crate::semantic::datatype::{Operator, Value};
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -17,19 +18,16 @@ pub enum Statement {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
   Integer(i64),
-  Float(f64),
-  Variable(String),
+  Float(f64),  
   BinaryOperation {
-    lhs: Box<Expression>,
+    left: Box<Expression>,
     operator: Operator,
-    rhs: Box<Expression>,
+    right: Box<Expression>,
   },
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Operator {
-  Add,
-  Sub,
-  Mul,
-  Div,
+  UnaryOperation {
+    operator: Operator,
+    expr: Box<Expression>,
+  },
+  Identifier(String),
+  Constant(Value),
 }
