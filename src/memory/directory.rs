@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use crate::semantic::datatype::DataType;
+use crate::ast::{DataType, Operator, Value, Expression};
 
 #[derive(Debug)]
 pub struct FunctionDirectory {

@@ -39,7 +39,7 @@ impl<T> Stack<T> {
         }
     }
 
-    fn peek(&self) -> Option<&T> {
+    pub fn peek(&self) -> Option<&T> {
         match &self.top {
           Some(top) => Some(&top.data),
           None => None,

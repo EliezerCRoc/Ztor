@@ -2,9 +2,8 @@ use crate::parser::tokens::{Token, LexicalError};
 use std::collections::HashMap;
 use crate::memory::directory::{FunctionDirectory, FunctionInfo};
 use crate::memory::variables::VariableValueTable;
-use crate::semantic::datatype::{DataType, Value, Operator};
+use crate::ast::{DataType, Value, Operator, Expression};
 use crate::semantic::quadruples::QuadrupleList;
-use crate::ast::Expression;
 
 
 use crate::ast;
@@ -63,14 +62,14 @@ extern {
   }
 }
 
-// Top-level parse
+// El programa es Header, DecVars, DecFuncs y por ultimo Body
 pub Script: () = {
-  <start:Program> => ()
+  <start:Program> "main" <body:Body> "end" => ()
 }
 
-// El programa es Header, DecVars, DecFuncs y por ultimo Body
+
 pub Program: () = {
-  <header:Header> <vars:DecVars> <funcs:DecFuncs> "main" <body:Body> "end" => {
+  <header:Header> <vars:DecVars> <funcs:DecFuncs>   => {
 
      // Crea la función main
     let mut oFunctionInfoMain = FunctionInfo::new("void".to_string());
@@ -81,9 +80,9 @@ pub Program: () = {
         }      
         let mut iIndex = usize::MIN;
         match *oType {
-            DataType::Int => {iIndex =  oVariableValueTable.set(Value::Int(0), *oType)},
-            DataType::Float => {iIndex =  oVariableValueTable.set(Value::Float(0.0), *oType)},
-            DataType::Bool => {iIndex =  oVariableValueTable.set(Value::Bool(false), *oType)}
+            DataType::Int => {iIndex =  oVariableValueTable.insert(Value::Int(0), *oType)},
+            DataType::Float => {iIndex =  oVariableValueTable.insert(Value::Float(0.0), *oType)},
+            DataType::Bool => {iIndex =  oVariableValueTable.insert(Value::Bool(false), *oType)}
         };
          
 
@@ -351,17 +350,43 @@ Termino: Expression = {
 
 TerminoDerecha: Option<(Operator, Expression)> = {
     => None,
-    "+" <t:Termino> => Some((Operator::Add, t)),
-    "-" <t:Termino> => Some((Operator::Sub, t)),
+    <op:TerminoDerechaSigno> <t:Termino> => {
+      oQuadrupleList.GenerateQuadruple(oVariableValueTable);
+      Some((op, t))
+      },
+    //<op:TerminoDerechaSigno> <t:Termino> => Some((Operator::Sub, t)),
+};
+
+TerminoDerechaSigno: Operator = {
+    "+" => {
+      oQuadrupleList.InsertOperator(Operator::Add);
+      Operator::Add
+    },
+    "-" => {
+      oQuadrupleList.InsertOperator(Operator::Sub);
+      Operator::Sub
+    },
 };
 
 
 FactorDerecha: Option<(Operator, Expression)> = {
     => None,
-    "*" <f:Factor> => Some((Operator::Mul, f)),
-    "/" <f:Factor> => Some((Operator::Div, f)),
+    <op:FactorDerechaSigno> <f:Factor> => {
+      oQuadrupleList.GenerateQuadruple(oVariableValueTable);    
+      Some((op, f))}//,}
+    //"/" <f:Factor> => Some((Operator::Div, f)),
 };
 
+FactorDerechaSigno: Operator = {
+    "*" => {
+      oQuadrupleList.InsertOperator(Operator::Mul);
+      Operator::Mul
+    },
+    "/" => {
+      oQuadrupleList.InsertOperator(Operator::Div);
+      Operator::Div
+    },
+};
 
 // Factores
 Factor: Expression = {
@@ -375,22 +400,60 @@ Factor: Expression = {
 
 FactorSigno: Option<Operator> = {
     => None,
-    "+" => Some(Operator::Add),
-    "-" => Some(Operator::Sub),
+    "+" => {
+      //oQuadrupleList.InsertOperator(Operator::Add);
+      Some(Operator::Add)
+    },
+    "-" => {
+      //oQuadrupleList.InsertOperator(Operator::Sub);
+      Some(Operator::Sub)
+    },
 };
 
 
 // Identificador o constante
 FactorValor: Expression = {
-    <id:"identifier"> => Expression::Identifier(id.to_string()),
-    <cte:CTE> => cte,
+    <id:"identifier"> => {
+
+
+      oQuadrupleList.InsertOperand(oFuncDirectory.oFunctions["main"].oVariableDirectory[&id]);
+
+      Expression::Identifier(id.to_string())},
+    <cte:CTE> => {
+      
+       oQuadrupleList.InsertOperand(oFuncDirectory.oFunctions["main"].oVariableDirectory[&cte]);
+       Expression::Identifier(cte)
+      },
 };
 
 
 // Constantes
-pub CTE: Expression = {
-  <i:"int"> => Expression::Constant(Value::Int(i)),
-  <f:"float"> => Expression::Constant(Value::Float(f)),
+pub CTE: String = {
+  <i:"int"> => {
+      let mut iIndex = usize::MIN;
+      iIndex = oVariableValueTable.insert(Value::Int(i), DataType::Int);
+      
+      oFuncDirectory
+          .oFunctions
+          .get_mut("main")
+          .unwrap()
+          .oVariableDirectory
+          .insert(i.to_string(), iIndex);
+
+      i.to_string()
+  },
+
+  <f:"float"> => {
+    let mut iIndex = usize::MIN;
+    
+    iIndex =  oVariableValueTable.insert(Value::Float(f), DataType::Float);
+          oFuncDirectory
+          .oFunctions
+          .get_mut("main")
+          .unwrap()
+          .oVariableDirectory.insert(f.to_string(), iIndex);
+    f.to_string()
+  },
 }
 
 // Tipos
@@ -398,52 +461,3 @@ pub Type: Box<DataType> = {
   "KeywordInt" => Box::new(DataType::Int),
   "KeywordFloat" => Box::new(DataType::Float),
 }
-
-// // Expresiones aritméticas
-// pub Expression: Box<ast::Expression> = {
-//   #[precedence(level="1")]
-//   Term,
-
-//   #[precedence(level="2")] #[assoc(side="left")]
-//   <lhs:Expression> "*" <rhs:Expression> => {
-//     Box::new(ast::Expression::BinaryOperation {
-//       lhs,
-//       operator: ast::Operator::Mul,
-//       rhs
-//     })
-//   },
-//   <lhs:Expression> "/" <rhs:Expression> => {
-//     Box::new(ast::Expression::BinaryOperation {
-//       lhs,
-//       operator: ast::Operator::Div,
-//       rhs
-//     })
-//   },
-
-//   #[precedence(level="3")] #[assoc(side="left")]
-//   <lhs:Expression> "+" <rhs:Expression> => {
-//     Box::new(ast::Expression::BinaryOperation {
-//       lhs,
-//       operator: ast::Operator::Add,
-//       rhs
-//     })
-//   },
-//   <lhs:Expression> "-" <rhs:Expression> => {
-//     Box::new(ast::Expression::BinaryOperation {
-//       lhs,
-//       operator: ast::Operator::Sub,
-//       rhs
-//     })
-//   },
-// }
-
-// // Literales y variables
-// pub Term: Box<ast::Expression> = {
-//   <val:"int"> => {
-//     Box::new(ast::Expression::Integer(val))
-//   },
-//   <name:"identifier"> => {
-//     Box::new(ast::Expression::Variable(name))
-//   },
-//   "(" <e:Expression> ")" => e,
-// }

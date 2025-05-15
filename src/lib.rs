@@ -19,6 +19,6 @@ pub use parser::lexer::Lexer;
 pub use grammar::ProgramParser;
 pub use memory::directory::FunctionDirectory;
 pub use memory::variables::VariableValueTable;
-pub use semantic::datatype::{DataType, Value};
+pub use ast::{DataType, Value};
 pub use utils::stack::Stack;
 pub use semantic::quadruples::QuadrupleList;
