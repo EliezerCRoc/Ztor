@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+#![allow(warnings)]
+use std::{collections::HashMap, ops::Index};
 use crate::ast::{DataType, Operator, Value, Expression};
 
 #[derive(Debug)]
@@ -24,15 +25,15 @@ impl VariableValueTable {
     }
 
     // Insertar valores Int, Float y Bool en sus respectivas secciones
-    pub fn insert(&mut self, oVal: Value, oVariableType: DataType) -> usize {
+    pub fn insert<T: Into<Value>>(&mut self, oVal: T, oVariableType: DataType) -> Result<usize, String> {
         let mut iIndex: usize;
         match oVariableType{
             DataType::Int => {self.iIntCounter += 1;iIndex = self.iIntCounter },
             DataType::Float => {self.iFloatCounter += 1;iIndex = self.iFloatCounter},
             DataType::Bool => {self.iBoolCounter += 1; iIndex = self.iBoolCounter},
         }                       
-        self.oValues[iIndex] = Some(oVal);
-        iIndex        
+        self.oValues[iIndex] = Some(oVal.into());
+        Ok(iIndex)        
     }
     // Insertar valores en temp (principalmente para los temporales al generar expresiones)
     // pub fn insertTemp(&mut self, oVal: Value) -> usize {

@@ -1,5 +1,5 @@
 //Archivo que exporta para que la carpeta tests pueda hacer pruebas correspondientes
-
+#![allow(warnings)]
 #[macro_use]
 extern crate lalrpop_util;
 

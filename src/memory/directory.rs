@@ -1,5 +1,6 @@
+#![allow(warnings)]
 use std::collections::HashMap;
-use crate::ast::{DataType, Operator, Value, Expression};
+use crate::{ast::{DataType, Expression, Operator, Value}, VariableValueTable};
 
 #[derive(Debug)]
 pub struct FunctionDirectory {
@@ -25,6 +26,16 @@ impl FunctionInfo {
         Self {
             sReturnType: ReturnType,            
             oVariableDirectory: HashMap::new()
+        }
+    }
+
+    pub fn InsertVariable(&mut self,  oVariableValueTable: &mut VariableValueTable, sName: String, oType: DataType) -> bool {
+        match oVariableValueTable.insert(oType.DefaultValue(), oType) {
+            Ok(iIndex) => {
+                self.oVariableDirectory.insert(sName, iIndex);
+                true
+            }
+            Err(_) => false,
         }
     }
 }

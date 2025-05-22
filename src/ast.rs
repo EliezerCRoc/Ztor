@@ -1,3 +1,4 @@
+#![allow(warnings)]
 use core::fmt;
 use core::fmt::Error;
 use std::collections::{HashMap, VecDeque};
@@ -41,6 +42,31 @@ pub enum Value {
     None,             
 }
 
+impl From<i64> for Value {
+    fn from(val: i64) -> Self {
+        Value::Int(val)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(val: f64) -> Self {
+        Value::Float(val)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(val: bool) -> Self {
+        Value::Bool(val)
+    }
+}
+
+impl From<String> for Value {
+    fn from(val: String) -> Self {
+        Value::Id(val)
+    }
+}
+
+
 impl Value {
     pub fn get_type(&self) -> DataType {
         match self {
@@ -63,6 +89,15 @@ pub enum DataType {
     Float,
     Bool,
 }
+impl DataType {
+    pub fn DefaultValue(&self) -> Value {
+        match self {
+            DataType::Int => Value::Int(0),
+            DataType::Float => Value::Float(0.0),
+            DataType::Bool => Value::Bool(false),
+        }
+    }
+}
 
 #[derive(Copy, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Operator {
@@ -73,4 +108,10 @@ pub enum Operator {
     GreaterThan, // >
     LessThan, // <
     NotEqual, // !=
+    Parenthesis,
+    Goto,
+    GotoF,
+    GotoV,
+    Assign,
+    Print,
 }

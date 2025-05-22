@@ -6,7 +6,9 @@ mod ast;
 mod memory;
 mod semantic;
 mod utils;
-lalrpop_mod!(#[allow(clippy::all)] pub grammar); // synthesized by LALRPOP
+
+lalrpop_mod!(#[allow(clippy::all, warnings)] pub grammar); // synthesized by LALRPOP
+
 
 use memory::directory::{FunctionDirectory, FunctionInfo};
 use memory::variables::VariableValueTable;
@@ -34,8 +36,20 @@ fn main() {
                             var c,d : float;
                             main
                             {
-                                
-                                b = a + 1 * 5;
+                                if(a > 5) do {
+                                    b = (a + 1) * (5 + 3) / 2;
+                                }
+                                else{
+                                    a = (b * 4)/2 * 5;
+                                };
+
+                             
+                                while(a > 10) do {
+                                    a = a - 1;
+                                    
+                                };
+                                c = 2;
+
                             }
                             end";
 
@@ -46,7 +60,10 @@ fn main() {
 
     println!("{:?}", oFuncDirectory);
     //println!("{:?}", oVariableValueTable.get(oFuncDirectory.oFunctions["main"].oVariableDirectory["b"]));
-    println!("{:?}", oQuadrupleList.oQuadruples);
+
+
+
+    oQuadrupleList.print_table();
 
 
 }
