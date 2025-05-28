@@ -1,8 +1,8 @@
 use crate::parser::tokens::{Token, LexicalError};
 use std::collections::HashMap;
 use crate::memory::directory::{FunctionDirectory, FunctionInfo};
-use crate::memory::variables::VariableValueTable;
-use crate::ast::{DataType, Value, Operator, Expression};
+use crate::memory::variables::{VariableValueDirectory};
+use crate::ast::{DataType, Value, Operator, Expression, Context};
 use crate::semantic::quadruples::QuadrupleList;
 
 
@@ -10,7 +10,7 @@ use crate::ast;
 
 
 grammar<'input>(oFuncDirectory:&'input mut FunctionDirectory, 
-                oVariableValueTable:&'input mut VariableValueTable,
+                oVariableValueDirectory:&'input mut VariableValueDirectory,               
                 oQuadrupleList:&'input mut QuadrupleList,);
 
 extern {
@@ -64,33 +64,52 @@ extern {
 
 // El programa es Header, DecVars, DecFuncs y por ultimo Body
 pub Script: () = {
-  <start:Program> "main" <body:Body> "end" => ()
+  <start:Program> <funcs:DecFuncs>  <main:ScriptMainStart> <body:Body> "end" => {
+    for (sFuncName, oFunctInfo) in funcs {
+        if oFuncDirectory.oFunctions.contains_key(&sFuncName) {
+            panic!("Function '{}' already declared", sFuncName); // Validación
+        }      
+        oFuncDirectory.oFunctions.insert(sFuncName,  oFunctInfo);
+    }
+    ()
+  }
 }
 
+pub ScriptMainStart: () = {
+  "main" => {
+    // Inicia el GOTO inicial para que siempre inicie en main
+    let size = oQuadrupleList.getSize();
+
+    oQuadrupleList.FinishJump();
+    oFuncDirectory.setStartPointer("main", size); // Guardar donde inicia la funcion main
+  }
+}
 
 pub Program: () = {
-  <header:Header> <vars:DecVars> <funcs:DecFuncs>   => {
+  <header:Header> <vars:DecVars>   => {
 
      // Crea la función main
-    let mut oFunctionInfoMain = FunctionInfo::new("void".to_string());
+    let mut oFunctionInfoMain = FunctionInfo::new("void".to_string(), 0);
 
     for (sName, oType) in vars {
         if oFunctionInfoMain.oVariableDirectory.contains_key(&sName) {
             panic!("Variable '{}' already declared", sName); // Validación
         }      
-        oFunctionInfoMain.InsertVariable(oVariableValueTable, sName, *oType);
+        //Genera la variable y su espacio de memoria en contexto global
+        oFunctionInfoMain.InsertVariable(oVariableValueDirectory, Context::Global, sName, *oType);
 
 
     }
     //Genera tabla de variables de la funcion main y  se guarda en mi directorio de funciones
     oFuncDirectory.oFunctions.insert("main".to_string(), oFunctionInfoMain);
 
-    for (sFuncName, oFunctInfo) in funcs {
-        if oFuncDirectory.oFunctions.contains_key(&sFuncName) {
-            panic!("Function '{}' already declared", sFuncName); // Validación
-        }      
-        oFuncDirectory.oFunctions.insert(sFuncName, oFunctInfo);
-    }
+
+    // Genera salto 
+    let size = oQuadrupleList.getSize();
+    oQuadrupleList.InsertJump(size);
+    oQuadrupleList.InsertOperator(Operator::Goto);    
+    oQuadrupleList.GenerateQuadrupleGoto(None);
+    
     ()
 
   }
@@ -111,6 +130,7 @@ Body: Vec<String> = {
   }
 }
 
+
 // Statement
 
 DecStatement: Vec<String> = {
@@ -127,7 +147,7 @@ Assign: String = {
   <id: "identifier"> "=" <exp:Expresion> ";" => {
     oQuadrupleList.InsertOperand(oFuncDirectory.oFunctions["main"].oVariableDirectory[&id]);
     oQuadrupleList.InsertOperator(Operator::Assign);
-    oQuadrupleList.GenerateQuadruple(oVariableValueTable);
+    oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
     format!("Asignacion( {})", id)
   }
 }
@@ -141,16 +161,18 @@ Condition: String = {
 
 ConditionHeader: String = {
   "if" "(" <exp:Expresion> ")" "do" => {
+    
     oQuadrupleList.InsertOperator(Operator::GotoF);
-    oQuadrupleList.GenerateQuadrupleConditional(oVariableValueTable);
+    oQuadrupleList.GenerateQuadrupleConditional();
     "Header".to_string()
   }
 }
 
 ConditionBody: String = {
   <b:Body> => {
+
       oQuadrupleList.InsertOperator(Operator::Goto);
-      oQuadrupleList.GenerateQuadrupleConditional(oVariableValueTable);
+      oQuadrupleList.GenerateQuadrupleConditional();
       "Body".to_string()
   }
 }
@@ -168,7 +190,7 @@ Cycle: String = {
   <cd:CycleHeader> <cc:CycleCondition> "do" <b:Body> ";" => {
     oQuadrupleList.InsertOperator(Operator::Goto);
 
-    oQuadrupleList.GenerateQuadrupleCycle(oVariableValueTable);
+    oQuadrupleList.GenerateQuadrupleCycle();
 
     format!("Cycle()")
   }
@@ -177,7 +199,9 @@ Cycle: String = {
 CycleHeader: String = {
   "while" => {
       // Insertamos el siguiente indice que apenas vamos a generar para que haga el salto
-      oQuadrupleList.InsertJump(oQuadrupleList.oQuadruples.len());
+      let size = oQuadrupleList.getSize();
+      oQuadrupleList.InsertJump(size);
+      
       "while".to_string()
 
   }
@@ -186,7 +210,7 @@ CycleHeader: String = {
 CycleCondition: String = {
   "(" <exp:Expresion> ")" => {
       oQuadrupleList.InsertOperator(Operator::GotoF);
-      oQuadrupleList.GenerateQuadrupleCycle(oVariableValueTable);
+      oQuadrupleList.GenerateQuadrupleCycle();
       
       "Condition".to_string()
   }
@@ -199,16 +223,20 @@ FCall: String = {
 }
 
 Print: String = {
-  "print" "(" <pt:PrintTipo> ")" ";"=> {
+  "print" "(" <pt:PrintTipo><pe:PrintExtra> ")" ";"=> {
     format!("Print({})", pt)
   }
 }
 
 PrintTipo: String = {
-  <exp:Expresion><pe:PrintExtra> => {
+  <exp:Expresion> => {
+      oQuadrupleList.InsertOperator(Operator::Print);
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
+
+
       "Expresion".to_string()
   },
-  <val:"cte.string"> <pe:PrintExtra> => {
+  <val:"cte.string">  => {
      "String".to_string()
   }
 }
@@ -236,7 +264,6 @@ Vars: Vec<(String, Box<DataType>)> = {
     vars.into_iter().map(|id| (id, tpe.clone())).collect()
   }
 }
-
 
 Variable: Vec<String> = {
   <name:"identifier"> <more:MASIDS> => {
@@ -272,7 +299,7 @@ pub DecFuncs: Vec<(String, FunctionInfo)> = {
 Funcs: Vec<(String, FunctionInfo)> = {
   "void" <name:"identifier"> "(" <params:DecParametros> ")" "[" <vars:DecVars> <body:Body> "]" ";" => {
     //format!("DeclaracionFuncion({}, {:?}, {:?}, {:?})", name, params, vars, body)
-    let mut oFunctionInfo = FunctionInfo::new("void".to_string());
+    let mut oFunctionInfo = FunctionInfo::new("void".to_string(),0);
     let mut v = params;
     v.extend(vars);
     // Declaracion parametros y variables dentro de funcion
@@ -355,10 +382,11 @@ Expresion: Expression = {
 TipoExp: Option<(Operator, Expression)> = {
     => None,
     <sign:TipoExpSign> <exp:EXP> => {
-                                      oQuadrupleList.GenerateQuadruple(oVariableValueTable);
+                                      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
                                       Some((sign, exp))
                                     },
 };
+
 TipoExpSign: Operator = {
   ">" => { 
           
@@ -373,7 +401,7 @@ TipoExpSign: Operator = {
             oQuadrupleList.InsertOperator(Operator::NotEqual);
             Operator::NotEqual
           }
-}
+};
 
 // Expresión aritmética básica
 EXP: Expression = {
@@ -387,12 +415,12 @@ EXP: Expression = {
       None => lhs
     }
   }
-}
+};
 
 // Un solo término
 Termino: Expression = {
     <lhs:DecFactor> <rhs:FactorDerecha> => {
-      oQuadrupleList.GenerateQuadruple(oVariableValueTable);
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
 
       match rhs {
               Some((op, right)) => Expression::BinaryOperation {
@@ -410,7 +438,7 @@ TerminoDerecha: Option<(Operator, Expression)> = {
     => None,
     //Antiguo error donde se redirigia a Termino en vez de Expresion
     <op:TerminoDerechaSigno> <exp:EXP> => {
-      oQuadrupleList.GenerateQuadruple(oVariableValueTable);
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
       Some((op, exp))
       },
     //<op:TerminoDerechaSigno> <t:Termino> => Some((Operator::Sub, t)),
@@ -449,7 +477,7 @@ FactorDerechaSigno: Operator = {
 
 DecFactor: Expression = {
   <f:Factor> => {
-      oQuadrupleList.GenerateQuadruple(oVariableValueTable);
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
       f
   }
 }
@@ -474,10 +502,6 @@ FactorParentesisDerecha: Operator = {
   ")" => {    
 
     oQuadrupleList.DeleteOperator();
-    
-
-    //oQuadrupleList.GenerateQuadruple(oVariableValueTable);
-    
 
     Operator::Parenthesis
   }
@@ -504,56 +528,17 @@ FactorValor: Expression = {
       },
 };
 
-
 // Constantes
 pub CTE: String = {
   <i:"int"> => {      
-    if (oFuncDirectory.oFunctions["main"].oVariableDirectory.get(&i.to_string()).is_none()){
+    oFuncDirectory.InsertVariable("main", oVariableValueDirectory, Context::Constant, i.to_string(),  Value::Int(i), DataType::Int);
 
-      match oVariableValueTable.insert(Value::Int(i), DataType::Int) {
-            Ok(iIndex) => {     
-
-
-                oFuncDirectory
-                  .oFunctions
-                  .get_mut("main")
-                  .unwrap()
-                  .oVariableDirectory
-                  .insert(i.to_string(), iIndex);
-                
-                i.to_string();
-              
-              },
-            Err(e) => {
-                panic!("Error al insertar en tabla de variables: {}", e);
-                "".to_string();
-            }
-        }
-        
-    }
     i.to_string()
   },
 
   <f:"float"> => {
-    if (oFuncDirectory.oFunctions["main"].oVariableDirectory.get(&f.to_string()).is_none()){
-        match oVariableValueTable.insert(Value::Float(f), DataType::Float) {
-          Ok(iIndex) => {                                
-              oFuncDirectory
-                .oFunctions
-                .get_mut("main")
-                .unwrap()
-                .oVariableDirectory
-                .insert(f.to_string(), iIndex);
+    oFuncDirectory.InsertVariable("main", oVariableValueDirectory, Context::Constant, f.to_string(),  Value::Float(f), DataType::Float);
 
-              f.to_string();
-            
-          },
-          Err(e) => {
-              panic!("Error al insertar en tabla de variables: {}", e);
-              "".to_string();
-          }
-      }
-    }
     f.to_string()
   },
 }

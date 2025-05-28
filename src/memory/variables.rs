@@ -1,6 +1,9 @@
 #![allow(warnings)]
 use std::{collections::HashMap, ops::Index};
-use crate::ast::{DataType, Operator, Value, Expression};
+use crate::utils::stack::Stack;
+use crate::ast::{DataType, Operator, Value, Expression, Context};
+
+
 
 #[derive(Debug)]
 
@@ -10,22 +13,24 @@ pub struct VariableValueTable {
     iBoolCounter: usize,
     //iTempCounter: usize,
 
+
     oValues: Vec<Option<Value>>,
 }
 
 impl VariableValueTable {
     pub fn new() -> Self {
         Self {            
-            iIntCounter: 1000,
-            iFloatCounter: 2000,
-            iBoolCounter: 3000,
-            //iTempCounter: 4000,
-            oValues: vec![None; 7000],
+            iIntCounter: (DataType::Int as usize),
+            iFloatCounter: (DataType::Float as usize),
+            iBoolCounter: (DataType::Bool as usize),
+            oValues: vec![None; 10000],
+
+
         }
     }
 
     // Insertar valores Int, Float y Bool en sus respectivas secciones
-    pub fn insert<T: Into<Value>>(&mut self, oVal: T, oVariableType: DataType) -> Result<usize, String> {
+    pub fn insert<T: Into<Value>>(&mut self, oVal: T, oVariableType: DataType) -> usize {
         let mut iIndex: usize;
         match oVariableType{
             DataType::Int => {self.iIntCounter += 1;iIndex = self.iIntCounter },
@@ -33,18 +38,11 @@ impl VariableValueTable {
             DataType::Bool => {self.iBoolCounter += 1; iIndex = self.iBoolCounter},
         }                       
         self.oValues[iIndex] = Some(oVal.into());
-        Ok(iIndex)        
+        return iIndex;
     }
-    // Insertar valores en temp (principalmente para los temporales al generar expresiones)
-    // pub fn insertTemp(&mut self, oVal: Value) -> usize {
-    //     self.iTempCounter += 1;
-    //     let mut iIndex: usize = self.iTempCounter;               
-    //     self.oValues[iIndex] = Some(oVal);
-    //     iIndex        
-    // }
     
     // Inserta el valor de una variable en su espacio de memoria
-    pub fn set(&mut self, oVal: Value, uAddress: usize) {           
+    pub fn set(&mut self, uAddress: usize, oVal: Value) {           
         self.oValues[uAddress] = Some(oVal);
     }
     pub fn get(&self, addr: usize) -> Option<&Value> {
@@ -52,4 +50,147 @@ impl VariableValueTable {
     }
 
 
+}
+
+pub struct VariableValueDirectory {
+    uGlobalOffsize: usize,
+    uConstantOffsize: usize,
+    uLocalOffsize:usize,
+    uTempOffsize: usize,
+
+    // Tablas globales
+    oGlobalTable: VariableValueTable,
+    oConstantTable: VariableValueTable,
+
+    // Cuando se generen diferentes sesiones(llamadas a funciones), se guardara en stack la sesion y se generara uno nuevo
+    oLocalDirectory: Stack<VariableValueTable>,
+    oTempDirectory: Stack<VariableValueTable>,
+
+    // Tablas actuales de sesion
+    oLocalValueTable: VariableValueTable,
+    oTempValueTable: VariableValueTable, // Siempre inicia con uno principal refiriendose a la tabla Global
+}
+
+impl VariableValueDirectory{
+    pub fn new() -> Self{
+        Self {
+            uGlobalOffsize:(Context::Global as usize),
+            uConstantOffsize:(Context::Constant as usize),
+            uLocalOffsize:(Context::Local as usize),
+            uTempOffsize:(Context::Temp as usize),
+
+            oGlobalTable: VariableValueTable::new(),
+            oConstantTable: VariableValueTable::new(),
+
+            oLocalDirectory: Stack::new(),
+            oTempDirectory: Stack::new(),
+
+            oLocalValueTable: VariableValueTable::new(),
+            oTempValueTable: VariableValueTable::new()
+
+        }
+    }
+
+    fn getTableType(&mut self, uIndex: usize) -> Context{
+        
+        let mut oContext: Context = Context::Global;
+
+        if uIndex >= Context::Constant as usize && uIndex < Context::Local as usize {
+            oContext = Context::Constant;
+
+        } else if uIndex >= Context::Local as usize && uIndex < Context::Temp as usize {
+            oContext = Context::Local;
+        } else if uIndex >= Context::Temp as usize {
+            oContext = Context::Temp;
+        } 
+
+        return oContext;
+    }
+
+    pub fn generateVariable(&mut self, oContext: Context, oValue: Value, oType: DataType) -> Result<usize, String>{
+ 
+        match oContext {
+            Context::Global => {
+                return Ok(self.oGlobalTable.insert(oValue, oType) + self.uGlobalOffsize);
+            },
+            Context::Constant => {
+                return Ok(self.oConstantTable.insert(oValue, oType) + self.uConstantOffsize);
+            },
+            Context::Local => {
+                return Ok(self.oLocalValueTable.insert(oValue, oType) + self.uLocalOffsize);
+            },
+            Context::Temp => {
+                return Ok(self.oTempValueTable.insert(oValue, oType) + self.uTempOffsize);
+            },
+            _ => {
+                panic!("Error: Generating Value in Memory");
+            }
+        }
+    }
+
+    pub fn setValue(&mut self, uIndex: &mut usize, oValue: Value) {
+                   
+
+
+        match self.getTableType(*uIndex) {
+            Context::Global => {
+                *uIndex = *uIndex - self.uGlobalOffsize;
+                self.oGlobalTable.set(*uIndex,oValue);
+            },
+            Context::Constant => {
+                *uIndex = *uIndex - self.uConstantOffsize;
+                self.oConstantTable.set(*uIndex,oValue);
+            },
+            Context::Local => {
+                *uIndex = *uIndex - self.uLocalOffsize;
+                self.oLocalValueTable.set(*uIndex,oValue);
+            },
+            Context::Temp => {
+                *uIndex = *uIndex - self.uTempOffsize;
+                self.oTempValueTable.set(*uIndex,oValue);
+            },
+            _ => {
+                panic!("Error: Inserting Value in Memory");
+            }
+        }
+
+    }
+    
+    pub fn getValue(&mut self, uIndex: &mut usize) -> Option<&Value> {
+        let oResult: Option<&Value>;
+
+
+        match self.getTableType(*uIndex) {
+            Context::Global => {
+                *uIndex = *uIndex - self.uGlobalOffsize;
+                oResult = self.oGlobalTable.get(*uIndex);
+            },
+            Context::Constant => {
+                *uIndex = *uIndex - self.uConstantOffsize;
+                oResult = self.oConstantTable.get(*uIndex);
+            },
+            Context::Local => {
+                *uIndex = *uIndex - self.uLocalOffsize;
+                oResult = self.oLocalValueTable.get(*uIndex);
+            },
+            Context::Temp => {
+                *uIndex = *uIndex - self.uTempOffsize;
+                oResult = self.oTempValueTable.get(*uIndex);
+            },
+            _ => {
+                panic!("Error:Getting Value from Memory");
+            }
+
+        }
+        return oResult;
+    }
+    // // Obtener session actual, saber si esta en Global, Local
+    // pub fn GetActualSession(&mut self) -> VariableValueTable{
+    //     // Si no se tiene nada en el directorio local es porque ya estamos en main
+    //     match self.oLocalDirectory.pop() {
+    //         Some(oVariableValueTable) => {return oVariableValueTable},
+    //         None => {return self.oGlobalTable}
+    //     };
+
+    // }
 }

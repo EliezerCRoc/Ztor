@@ -2,10 +2,11 @@
 use std::collections::HashMap;
 
 use crate::semantic::cube::SemanticCube;
-use crate::ast::{DataType, Operator, Value, Expression};
+use crate::ast::{DataType, Operator, Value, Expression, Context};
 
 use crate::utils::stack::Stack;
-use crate::memory::variables::VariableValueTable;
+use crate::memory::variables::{VariableValueDirectory };
+
 
 #[derive(Debug)]
 enum PolacItem {
@@ -36,19 +37,21 @@ impl Quadruple{
 pub struct QuadrupleList {
     //Tabla de Variables parecida a la directory para las funciones, pero aqui solo guarda temporales
     //Usa la misma tabla de variables de memoria, y tambien se usa para guardar las constantes
-    pub oVariableTempTable: HashMap<String, usize>, // El usize minimo es el que esta en Variables: 4000
+    oVariableTempTable: HashMap<String, usize>, // El usize minimo es el que esta en Variables: 4000
 
     //Stack de operadores
-    pub oOperatorStack: Stack<Operator>,
+    oOperatorStack: Stack<Operator>,
 
     //Stack de Variables y Constantes, solo guarda la memoria
-    pub oOperandStack: Stack<usize>,
+    oOperandStack: Stack<usize>,
 
     //Stack de Variables y Constantes, solo guarda la memoria
-    pub oJumpsStack: Stack<usize>,
+    oJumpsStack: Stack<usize>,
 
     //Vector de cuadruplos, aqui se registraran todas las acciones
-    pub oQuadruples: Vec<Quadruple>,
+    oQuadruples: Vec<Quadruple>,
+
+    pub oContext: Context
 }
 
 impl QuadrupleList {
@@ -60,7 +63,16 @@ impl QuadrupleList {
             oOperandStack: Stack::new(),    
             oJumpsStack: Stack::new(),
             oQuadruples: Vec::new(),
+            oContext: Context::Global // La lista de cuadruplos siempre iniciara en Global
         }
+    }
+
+    pub fn getSize(&self) -> usize{
+        return self.oQuadruples.len();
+    }
+
+    pub fn getQuadruple(&self, uIndex: usize) -> &Quadruple{
+        return &self.oQuadruples[uIndex];
     }
 
     pub fn InsertOperand(&mut self, _uVar: usize){
@@ -80,30 +92,34 @@ impl QuadrupleList {
         self.oOperatorStack.pop();
     }
 
-    pub fn getType(&self, addr: usize) -> DataType {
-        if(addr < 2000 && addr > 1000){
-            DataType::Int
-        }
-        else if (addr < 3000 && addr > 2000){
-            DataType::Float
-        }
-        else {
-            DataType::Bool
-        }
-    }
+    
 
     pub fn CheckSemanticCube(&mut self,uRighOperand: usize, uLeftOperand: usize, _oOperator: Operator) -> Option<DataType>{
         let oSemanticCube = SemanticCube::new();
 
-        let mut oRightOperandType: DataType = self.getType(uRighOperand);
-        let mut oLeftOperandType: DataType = self.getType(uLeftOperand);
+        let mut oRightOperandType: DataType = DataType::GetType(uRighOperand);
+        let mut oLeftOperandType: DataType = DataType::GetType(uLeftOperand);
         
         oSemanticCube.result_type(oLeftOperandType, oRightOperandType, _oOperator)
 
     }
+
+    pub fn GenerateQuadrupleGoto(&mut self, uJump: Option<usize>){               
+        
+        let oOperator = self.oOperatorStack.pop().unwrap();      
+        
+
+        let oQuadrupleTemp = Quadruple::new(oOperator, 
+                                                        None, 
+                                                        None,
+                                                            uJump
+                                                    );
+        self.oQuadruples.push(oQuadrupleTemp);    
+    }
+    
     // Genera Cuadruplo para todos los operadores
     // Regresa Bool: True: Si funciono | False : No Funciono
-     pub fn GenerateQuadruple(&mut self, oVariableValueTable: &mut VariableValueTable) -> bool{
+     pub fn GenerateQuadruple(&mut self, oVariableValueDirectory: &mut VariableValueDirectory) -> bool{
         if let Some(operator_ref) = self.oOperatorStack.peek() {
             match operator_ref {
                 Operator::Add | Operator::Sub |
@@ -111,16 +127,21 @@ impl QuadrupleList {
                 Operator::GreaterThan | Operator::LessThan |
                 Operator::NotEqual  => {
                    
-                    let right_operand = self.oOperandStack.pop().unwrap();
-                    let operator = self.oOperatorStack.pop().unwrap();
-                    let left_operand = self.oOperandStack.pop().unwrap();                     
-                    let result_type = self.CheckSemanticCube(right_operand, left_operand, operator);
-                    if let Some(r_type) = result_type {
-                        match oVariableValueTable.insert(r_type.DefaultValue(), r_type) { // Aqui se insertara el valor del resultado de las expresiones
+                    let uRightOperand = self.oOperandStack.pop().unwrap();
+                    let oOperator = self.oOperatorStack.pop().unwrap();
+                    let uLeftOperand = self.oOperandStack.pop().unwrap();        
+
+                    let oResultType = self.CheckSemanticCube(uRightOperand, uLeftOperand, oOperator);
+                    
+                    if let Some(oType) = oResultType {
+                        // Aqui se insertara el valor del resultado de las expresiones
+                        match oVariableValueDirectory.generateVariable(Context::Temp, // Como aqui se generan los resultados de operaciones, se guarda en el contexto temporal
+                                                                    oType.DefaultValue(), 
+                                                                    oType) { 
                         Ok(result_address) => {
-                            let quad = Quadruple::new(operator, 
-                                                            Some(left_operand),
-                                                            Some(right_operand), 
+                            let quad = Quadruple::new(oOperator, 
+                                                            Some(uLeftOperand),
+                                                            Some(uRightOperand), 
                                                             Some(result_address));
                             self.oQuadruples.push(quad);
 
@@ -131,7 +152,7 @@ impl QuadrupleList {
                     }
                         
                     } else {
-                        panic!("Type mismatch: {:?} {:?} {:?}", left_operand, operator, right_operand);
+                        panic!("Type mismatch: {:?} {:?} {:?}", uLeftOperand, oOperator, uRightOperand);
                         return false;
                     }
                 }       
@@ -142,12 +163,25 @@ impl QuadrupleList {
                     let oResult = self.oOperandStack.pop();//self.oQuadruples.last().unwrap().oResult;
                     
                     let oQuadrupleTemp = Quadruple::new(oOperator, 
-                                                                    oVariable, 
+                                                                    oResult, // Valor que sera asignado
                                                                     None,
-                                                                     oResult
+                                                                     oVariable // Variable donde se asignara el valor
                                                                 );
                     self.oQuadruples.push(oQuadrupleTemp);
                 }   
+                Operator::Print => {
+                    //let oVariable = self.oOperandStack.pop();
+
+                    let oOperator = self.oOperatorStack.pop().unwrap();
+                    let oResult = self.oOperandStack.pop();//self.oQuadruples.last().unwrap().oResult;
+                    
+                    let oQuadrupleTemp = Quadruple::new(oOperator, 
+                                                                    None, // Valor que sera asignado
+                                                                    None,
+                                                                     oResult // Variable donde se asignara el valor
+                                                                );
+                    self.oQuadruples.push(oQuadrupleTemp);
+                }
                   
                 _ => { // Para cualquier otro caso
                     return false;
@@ -157,7 +191,8 @@ impl QuadrupleList {
         false 
     }
 
-    pub fn GenerateQuadrupleConditional(&mut self, oVariableValueTable: &mut VariableValueTable) -> bool{
+    // Genera Cuadruplo para Condicional If
+    pub fn GenerateQuadrupleConditional(&mut self) -> bool{
         if let Some(operator_ref) = self.oOperatorStack.peek() {
             match operator_ref {                
                 Operator::GotoF => {
@@ -176,14 +211,8 @@ impl QuadrupleList {
                     self.InsertJump(iQuadrupleIndex.unwrap());                                         
                 } ,
                 Operator::Goto => {
-                    let oOperator = self.oOperatorStack.pop().unwrap();                    
-                    
-                    let oQuadrupleTemp = Quadruple::new(oOperator, 
-                                                                    None, 
-                                                                    None,
-                                                                     None
-                                                                );
-                    self.oQuadruples.push(oQuadrupleTemp);                    
+                    //Genera Cuadruplo GOTO Vacio
+                    self.GenerateQuadrupleGoto(None);  
                     self.FinishJump();
                     // Obtener el indice del quadruplo que ocupa saber el salto siguiente
                     let iQuadrupleIndex = self.oQuadruples.len().checked_sub(1); 
@@ -198,7 +227,8 @@ impl QuadrupleList {
         false 
     }
 
-    pub fn GenerateQuadrupleCycle(&mut self, oVariableValueTable: &mut VariableValueTable) -> bool{
+    // Genera Cuadruplo de Ciclos como While 
+    pub fn GenerateQuadrupleCycle(&mut self) -> bool{
         if let Some(operator_ref) = self.oOperatorStack.peek() {
             match operator_ref {                
                 Operator::GotoF => {
@@ -217,23 +247,22 @@ impl QuadrupleList {
                     self.InsertJump(iQuadrupleIndex.unwrap());                                
                 } ,
                 Operator::Goto => {
-                    let oOperator = self.oOperatorStack.pop().unwrap();      
                     let iEnd =self.oJumpsStack.pop().unwrap();
-                    let iReturn =self.oJumpsStack.pop();               
+                    let iReturn =self.oJumpsStack.pop();          
 
                     
-                    let oQuadrupleTemp = Quadruple::new(oOperator, 
-                                                                    None, 
-                                                                    None,
-                                                                     iReturn
-                                                                );
-                    self.oQuadruples.push(oQuadrupleTemp);                    
+                    self.GenerateQuadrupleGoto(iReturn);                  
 
-                    // Obtener el indice del quadruplo que ocupa saber el salto siguiente
-                    let iQuadrupleIndex = self.oQuadruples.len().checked_sub(1); 
-                    self.InsertJump(iQuadrupleIndex.unwrap());    
-                    self.FillGotoQuadruple(iEnd);
-                }
+                    // Rellena el GOTO generado para regrese al inicio del ciclo
+                    let iQuadrupleIndex = self.oQuadruples.len().checked_sub(1); // Cuadruplo GOTO Generado
+                    self.InsertJump(iQuadrupleIndex.unwrap());  // Insertar a jump el indice actual 
+
+                    self.FillGotoQuadruple(iEnd); // Ingresa el el inicio del goto
+                    println!("{:?}", iEnd);
+
+                    // Se estaba quedando un salto guardado checar si no causa error:
+                    self.oJumpsStack.pop();
+            }       
    
                 _ => { // Para cualquier otro caso
                     return false;
@@ -243,6 +272,7 @@ impl QuadrupleList {
         false 
     }
 
+    //Para los Goto ya generados, se ejecuta cuando ya se encontro el final del metodo
     pub fn FillGotoQuadruple(&mut self, iQuadrupleIndex: usize) -> bool{
         //Guardar en el Goto el indice a donde saltara
         self.oQuadruples[iQuadrupleIndex].oResult = Some(self.oQuadruples.len());
@@ -253,6 +283,7 @@ impl QuadrupleList {
         let iEnd = self.oJumpsStack.pop().unwrap();
         return self.FillGotoQuadruple(iEnd);
     }
+
 
     pub fn print_table(&self) {
 

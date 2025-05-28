@@ -32,8 +32,31 @@ pub enum Expression {
   Constant(Value),
 }
 
+#[derive(Copy,Debug, Clone)]
+#[repr(usize)]
+pub enum Context{
+    Global = 10000,
+    Constant = 20000,
+    Local = 30000,
+    Temp = 40000
+}
 
-#[derive(Debug, Clone, PartialEq)]
+impl Context {
+    pub fn getIndex( uIndex: usize) -> usize{       
+        if uIndex >= Context::Constant as usize && uIndex < Context::Local as usize {
+            return uIndex - (Context::Constant as usize);
+        } else if uIndex >= Context::Local as usize && uIndex < Context::Temp as usize {
+            return uIndex - (Context::Local as usize);
+        } else if uIndex >= Context::Temp as usize {
+            return uIndex - (Context::Temp as usize);
+        } else if uIndex >= Context::Global as usize {
+            return uIndex - (Context::Global as usize);
+        }
+        panic!("Error: Direccion Invalida")
+    }
+}
+
+#[derive( Debug, Clone, PartialEq)]
 pub enum Value {
     Int(i64),
     Float(f64),
@@ -84,10 +107,11 @@ impl Value {
 }
 
 #[derive(Copy,Debug, Clone, PartialEq, Eq, Hash)]
+#[repr(usize)]
 pub enum DataType {
-    Int,
-    Float,
-    Bool,
+    Int = 0,
+    Float = 4000,
+    Bool = 8000,
 }
 impl DataType {
     pub fn DefaultValue(&self) -> Value {
@@ -96,6 +120,16 @@ impl DataType {
             DataType::Float => Value::Float(0.0),
             DataType::Bool => Value::Bool(false),
         }
+    }
+    pub fn GetType(uIndex: usize) -> DataType {
+        let _uIndex = Context::getIndex(uIndex);
+        if ((_uIndex >= (DataType::Float as usize)) && (_uIndex < (DataType::Bool as usize)) ){
+            return DataType::Float;
+        }
+        else if(_uIndex > (DataType::Bool as usize)){
+            return DataType::Bool;
+        }
+        return DataType::Int;
     }
 }
 

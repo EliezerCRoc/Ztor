@@ -10,6 +10,7 @@ pub mod ast;
 pub mod memory;
 pub mod semantic;
 pub mod utils;
+pub mod compiler;
 
 
 lalrpop_mod!(#[allow(clippy::all)] pub grammar);
@@ -18,7 +19,8 @@ lalrpop_mod!(#[allow(clippy::all)] pub grammar);
 pub use parser::lexer::Lexer;
 pub use grammar::ProgramParser;
 pub use memory::directory::FunctionDirectory;
-pub use memory::variables::VariableValueTable;
+pub use memory::variables::{VariableValueDirectory,VariableValueTable};
 pub use ast::{DataType, Value};
 pub use utils::stack::Stack;
 pub use semantic::quadruples::QuadrupleList;
+pub use compiler::executer::Executer;
