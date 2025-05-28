@@ -65,6 +65,8 @@ fn main() {
                 & mut oQuadrupleList, lexer);
 
     println!("{:?}", oFuncDirectory);
+    println!("{:?}", oVariableValueDirectory);
+
     oQuadrupleList.print_table();
     //println!("{:?}", oVariableValueTable.get(oFuncDirectory.oFunctions["main"].oVariableDirectory["b"]));
     let mut oExecuter =Executer::new(&mut oFuncDirectory, 

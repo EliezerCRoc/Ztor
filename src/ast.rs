@@ -42,7 +42,8 @@ pub enum Context{
 }
 
 impl Context {
-    pub fn getIndex( uIndex: usize) -> usize{       
+    pub fn getIndex( uIndex: usize) -> usize{  
+    
         if uIndex >= Context::Constant as usize && uIndex < Context::Local as usize {
             return uIndex - (Context::Constant as usize);
         } else if uIndex >= Context::Local as usize && uIndex < Context::Temp as usize {
@@ -121,7 +122,7 @@ impl DataType {
             DataType::Bool => Value::Bool(false),
         }
     }
-    pub fn GetType(uIndex: usize) -> DataType {
+    pub fn GetTypeFromContext(uIndex: usize) -> DataType {
         let _uIndex = Context::getIndex(uIndex);
         if ((_uIndex >= (DataType::Float as usize)) && (_uIndex < (DataType::Bool as usize)) ){
             return DataType::Float;
@@ -129,6 +130,17 @@ impl DataType {
         else if(_uIndex > (DataType::Bool as usize)){
             return DataType::Bool;
         }
+        return DataType::Int;
+    }
+
+    pub fn GetType(uIndex: usize) -> DataType {
+        let _uIndex = uIndex;
+        if ((_uIndex >= (DataType::Float as usize)) && (_uIndex < (DataType::Bool as usize)) ){
+            return DataType::Float;
+        }
+        else if(_uIndex >= (DataType::Bool as usize)){
+            return DataType::Bool;
+        }        
         return DataType::Int;
     }
 }

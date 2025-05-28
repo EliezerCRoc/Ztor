@@ -97,8 +97,8 @@ impl QuadrupleList {
     pub fn CheckSemanticCube(&mut self,uRighOperand: usize, uLeftOperand: usize, _oOperator: Operator) -> Option<DataType>{
         let oSemanticCube = SemanticCube::new();
 
-        let mut oRightOperandType: DataType = DataType::GetType(uRighOperand);
-        let mut oLeftOperandType: DataType = DataType::GetType(uLeftOperand);
+        let mut oRightOperandType: DataType = DataType::GetTypeFromContext(uRighOperand);
+        let mut oLeftOperandType: DataType = DataType::GetTypeFromContext(uLeftOperand);
         
         oSemanticCube.result_type(oLeftOperandType, oRightOperandType, _oOperator)
 
@@ -257,8 +257,7 @@ impl QuadrupleList {
                     let iQuadrupleIndex = self.oQuadruples.len().checked_sub(1); // Cuadruplo GOTO Generado
                     self.InsertJump(iQuadrupleIndex.unwrap());  // Insertar a jump el indice actual 
 
-                    self.FillGotoQuadruple(iEnd); // Ingresa el el inicio del goto
-                    println!("{:?}", iEnd);
+                    self.FillGotoQuadruple(iEnd); // Ingresa el el inicio del goto                    
 
                     // Se estaba quedando un salto guardado checar si no causa error:
                     self.oJumpsStack.pop();

@@ -1,6 +1,6 @@
 #![allow(warnings)]
 use std::collections::HashMap;
-use crate::{ast::{DataType, Operator, Value, Context}, VariableValueDirectory};
+use crate::{ast::{DataType, Operator, Value, Context}, VariableValueDirectory, VariableValueTable};
 
 #[derive(Debug)]
 pub struct FunctionDirectory {
@@ -58,6 +58,8 @@ pub struct FunctionInfo {
     pub sReturnType: String,
     pub uStartPointer: usize,
     pub oVariableDirectory: HashMap<String, usize>, // Tabla de Variables (Nombre, Espacio Memoria)
+    pub oLocalValueTable: VariableValueTable,
+    pub oTempValueTable: VariableValueTable
 }
 
 impl FunctionInfo {
@@ -65,7 +67,10 @@ impl FunctionInfo {
         Self {
             sReturnType: ReturnType,            
             uStartPointer: uIndex,
-            oVariableDirectory: HashMap::new()
+            oVariableDirectory: HashMap::new(),
+            oLocalValueTable: VariableValueTable::new(),
+            oTempValueTable: VariableValueTable::new(),
+
         }
     }
     pub fn setStartPointer(&mut self, uIndex: usize){

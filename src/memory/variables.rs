@@ -13,9 +13,15 @@ pub struct VariableValueTable {
     iBoolCounter: usize,
     //iTempCounter: usize,
 
+    oIntVec: Vec<Option<Value>>,
+    oFloatVec: Vec<Option<Value>>,
+    oBoolVec: Vec<Option<Value>>,
 
-    oValues: Vec<Option<Value>>,
+
+    //oValues: Vec<Option<Value>>,
 }
+
+
 
 impl VariableValueTable {
     pub fn new() -> Self {
@@ -23,7 +29,12 @@ impl VariableValueTable {
             iIntCounter: (DataType::Int as usize),
             iFloatCounter: (DataType::Float as usize),
             iBoolCounter: (DataType::Bool as usize),
-            oValues: vec![None; 10000],
+
+            oIntVec: vec![],
+            oFloatVec: vec![],
+            oBoolVec: vec![],
+
+            //oValues: vec![None; 10000],
 
 
         }
@@ -33,25 +44,39 @@ impl VariableValueTable {
     pub fn insert<T: Into<Value>>(&mut self, oVal: T, oVariableType: DataType) -> usize {
         let mut iIndex: usize;
         match oVariableType{
-            DataType::Int => {self.iIntCounter += 1;iIndex = self.iIntCounter },
-            DataType::Float => {self.iFloatCounter += 1;iIndex = self.iFloatCounter},
-            DataType::Bool => {self.iBoolCounter += 1; iIndex = self.iBoolCounter},
+            DataType::Int => {iIndex = self.iIntCounter;self.oIntVec.push( Some(oVal.into()));self.iIntCounter += 1; },
+            DataType::Float => {iIndex = self.iFloatCounter;self.oFloatVec.push( Some(oVal.into()));self.iFloatCounter += 1;},
+            DataType::Bool => { iIndex = self.iBoolCounter;self.oBoolVec.push( Some(oVal.into()));self.iBoolCounter += 1;},
         }                       
-        self.oValues[iIndex] = Some(oVal.into());
+        // self.oValues[iIndex] = Some(oVal.into());
         return iIndex;
     }
     
     // Inserta el valor de una variable en su espacio de memoria
-    pub fn set(&mut self, uAddress: usize, oVal: Value) {           
-        self.oValues[uAddress] = Some(oVal);
+    pub fn set(&mut self, uAddress: usize, oVal: Value) {   
+        let mut _uAddress:usize = uAddress;                  
+        match DataType::GetType(_uAddress){
+            DataType::Int=> {_uAddress = _uAddress - (DataType::Int as usize);self.oIntVec[_uAddress] = Some(oVal); },
+            DataType::Float => {_uAddress = _uAddress - (DataType::Float as usize); self.oFloatVec[_uAddress] = Some(oVal);},
+            DataType::Bool => {_uAddress = _uAddress - (DataType::Bool as usize);  self.oBoolVec[_uAddress] = Some(oVal);},
+        }
+        //self.oValues[uAddress] = Some(oVal);
     }
-    pub fn get(&self, addr: usize) -> Option<&Value> {
-        self.oValues.get(addr)?.as_ref() // Con el ? regresa None en los casos que no exista
+    pub fn get(&self, uAddress: usize) -> Option<&Value> {
+        let mut _uAddress:usize = uAddress;                  
+
+        match DataType::GetType(_uAddress){
+            DataType::Int => {_uAddress = _uAddress - (DataType::Int as usize);self.oIntVec.get(_uAddress)?.as_ref() },
+            DataType::Float => {_uAddress = _uAddress - (DataType::Float as usize);self.oFloatVec.get(_uAddress)?.as_ref()},
+            DataType::Bool => {_uAddress = _uAddress - (DataType::Bool as usize);self.oBoolVec.get(_uAddress)?.as_ref()},
+        }
+        //self.oValues.get(addr)?.as_ref() // Con el ? regresa None en los casos que no exista
     }
 
 
 }
 
+#[derive(Debug)]
 pub struct VariableValueDirectory {
     uGlobalOffsize: usize,
     uConstantOffsize: usize,
@@ -103,7 +128,7 @@ impl VariableValueDirectory{
         } else if uIndex >= Context::Temp as usize {
             oContext = Context::Temp;
         } 
-
+        
         return oContext;
     }
 
@@ -146,7 +171,7 @@ impl VariableValueDirectory{
                 self.oLocalValueTable.set(*uIndex,oValue);
             },
             Context::Temp => {
-                *uIndex = *uIndex - self.uTempOffsize;
+                *uIndex = *uIndex - self.uTempOffsize;                
                 self.oTempValueTable.set(*uIndex,oValue);
             },
             _ => {
@@ -162,7 +187,8 @@ impl VariableValueDirectory{
 
         match self.getTableType(*uIndex) {
             Context::Global => {
-                *uIndex = *uIndex - self.uGlobalOffsize;
+
+                *uIndex = *uIndex - self.uGlobalOffsize;                
                 oResult = self.oGlobalTable.get(*uIndex);
             },
             Context::Constant => {
