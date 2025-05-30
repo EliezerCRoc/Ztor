@@ -27,10 +27,11 @@ use std::collections::HashMap; //Libreria para el uso de Hashmap es mejor usarla
 */
 
 fn main() {
-    let mut oFuncDirectory = FunctionDirectory::new();
     //let mut oVariableValueTable = VariableValueTable::new();
     let mut oQuadrupleList = QuadrupleList::new();
     let mut oVariableValueDirectory = VariableValueDirectory::new();
+    let mut oFuncDirectory = FunctionDirectory::new();
+
 
 
 
@@ -38,8 +39,20 @@ fn main() {
     let source_code = "    program prueba1;  
                             var a,b : int;
                             var c,d : float;
-                            void a1()[{
+                            void a1(param1: int)[
+                            var j: int;
+                            {
+                                j = 1000;
+                                print(j);
                                 a = 5;
+                                print(a);
+                                a2();
+                            }];
+                            void a2(param1: int)[
+                            var j: int;
+                            {
+                                print(j);
+                                a = 100;
                                 print(a);
                             }];
                             main
@@ -53,6 +66,7 @@ fn main() {
                                 };
                                 c = (2*5)/10;
                                 print(c);
+                                a1(a);
 
                             }
                             end";

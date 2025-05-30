@@ -64,24 +64,30 @@ extern {
 
 // El programa es Header, DecVars, DecFuncs y por ultimo Body
 pub Script: () = {
-  <start:Program> <funcs:DecFuncs>  <main:ScriptMainStart> <body:Body> "end" => {
-    for (sFuncName, oFunctInfo) in funcs {
-        if oFuncDirectory.oFunctions.contains_key(&sFuncName) {
-            panic!("Function '{}' already declared", sFuncName); // Validación
-        }      
-        oFuncDirectory.oFunctions.insert(sFuncName,  oFunctInfo);
-    }
+  <start:Program>  <main:ScriptMainStart> <body:Body> "end" => {
+    // for (sFuncName, oFunctInfo) in funcs {
+    //     if oFuncDirectory.oFunctions.contains_key(&sFuncName) {
+    //         panic!("Function '{}' already declared", sFuncName); // Validación
+    //     }      
+    //     oFuncDirectory.oFunctions.insert(sFuncName,  oFunctInfo);
+    // }
     ()
   }
 }
 
 pub ScriptMainStart: () = {
-  "main" => {
+  <funcs:DecFuncs> "main" => {
     // Inicia el GOTO inicial para que siempre inicie en main
     let size = oQuadrupleList.getSize();
 
     oQuadrupleList.FinishJump();
     oFuncDirectory.setStartPointer("main", size); // Guardar donde inicia la funcion main
+
+    //Como ya acabo de generar las funciones, quitamos el uso de sesiones
+
+    oVariableValueDirectory.setUseSession();
+    oVariableValueDirectory.SetKeySession("main".to_string());
+
   }
 }
 
@@ -89,14 +95,19 @@ pub Program: () = {
   <header:Header> <vars:DecVars>   => {
 
      // Crea la función main
-    let mut oFunctionInfoMain = FunctionInfo::new("void".to_string(), 0);
+    let mut oFunctionInfoMain = FunctionInfo::new("void".to_string(), 
+                                0, 
+                                oVariableValueDirectory.ExportSession(true),
+                                oVariableValueDirectory.ExportSession(false),                                 
+                                );
+  
 
     for (sName, oType) in vars {
         if oFunctionInfoMain.oVariableDirectory.contains_key(&sName) {
             panic!("Variable '{}' already declared", sName); // Validación
         }      
         //Genera la variable y su espacio de memoria en contexto global
-        oFunctionInfoMain.InsertVariable(oVariableValueDirectory, Context::Global, sName, *oType);
+        oFunctionInfoMain.GenerateVariable(oVariableValueDirectory, Context::Global, sName, *oType);
 
 
     }
@@ -138,14 +149,15 @@ DecStatement: Vec<String> = {
   <assign:Assign><ds:DecStatement> => vec![assign],
   <condition:Condition><ds:DecStatement> => vec![condition],
   <cycle:Cycle><ds:DecStatement> => vec![cycle],
-  <fCall:FCall><ds:DecStatement> => vec![fCall],
+  <fCall:FCall><ds:DecStatement> => vec![],
   <print:Print><ds:DecStatement> => vec![print]
 
 }
 
 Assign: String = {
   <id: "identifier"> "=" <exp:Expresion> ";" => {
-    oQuadrupleList.InsertOperand(oFuncDirectory.oFunctions["main"].oVariableDirectory[&id]);
+    let sKeySession = oVariableValueDirectory.GetKeySession();      
+    oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(sKeySession, id.clone()));
     oQuadrupleList.InsertOperator(Operator::Assign);
     oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
     format!("Asignacion( {})", id)
@@ -216,9 +228,24 @@ CycleCondition: String = {
   }
 }
 
-FCall: String = {
+FCall: () = {
   <id: "identifier"> "(" <de:DecExpresion> ")" ";"=> {
-    format!("FCall({})", id)
+    oQuadrupleList.InsertOperator(Operator::Era);
+    let _key = oVariableValueDirectory.GetKeySession();
+    oFuncDirectory.InsertVariable(&_key, 
+                                    oVariableValueDirectory,
+                                    Context::Constant, 
+                                    id.clone(), 
+                                    Value::String(id.clone()),
+                                    DataType::String
+                                    );
+    oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(_key,id));
+    oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
+
+    // oQuadrupleList.InsertOperator(Operator::GoSub);
+    ()
+
+    
   }
 }
 
@@ -286,32 +313,74 @@ MASIDS: Vec<String> = {
 // Funciones
 
 // Funciones: cero o más (Nombre, Info Funcion)
-pub DecFuncs: Vec<(String, FunctionInfo)> = {
-  => vec![],
-  <func:Funcs> <rest:DecFuncs> => {
-    let mut v = func;
-    v.extend(rest);
-    v
+pub DecFuncs: () = {
+  => (),
+   <funcs:Funcs> <rest:DecFuncs> => {
+    ()
   }
 }
 
 // Una función (Nombre, Info Funcion)
-Funcs: Vec<(String, FunctionInfo)> = {
-  "void" <name:"identifier"> "(" <params:DecParametros> ")" "[" <vars:DecVars> <body:Body> "]" ";" => {
-    //format!("DeclaracionFuncion({}, {:?}, {:?}, {:?})", name, params, vars, body)
-    let mut oFunctionInfo = FunctionInfo::new("void".to_string(),0);
-    let mut v = params;
-    v.extend(vars);
-    // Declaracion parametros y variables dentro de funcion
-    for (sName, oType) in v {
-        if oFunctionInfo.oVariableDirectory.contains_key(&sName) {
-            panic!("Variable '{}' already declared", sName); // Validación
-        }      
+Funcs: ()  = {
+    <FuncHead:FuncHead> <funcBody:FuncBody> => {
+      //Despues de generar la funcion agregar cuadruplo de fin
+      oQuadrupleList.InsertOperator(Operator::FinishFunction);
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
 
-        oFunctionInfo.oVariableDirectory.insert(sName, usize::MIN);
     }
+}
 
-    vec![(name,oFunctionInfo)]
+pub FuncHead: () = {
+  "void" <name:"identifier"> "(" <params:DecParametros> ")" "[" <vars:DecVars>  => {
+      //format!("DeclaracionFuncion({}, {:?}, {:?}, {:?})", name, params, vars, body)
+
+      let mut oFunctionInfo = FunctionInfo::new("void".to_string(),
+                                                0,                                
+                                                oVariableValueDirectory.ExportSession(true),
+                                                oVariableValueDirectory.ExportSession(false) 
+                                              );
+      let mut v = Vec::new();
+      v.extend(params.clone().into_iter());
+      v.extend(vars.clone().into_iter());
+
+
+
+      let uIndexNext = oQuadrupleList.getSize();
+
+      oFunctionInfo.setStartPointer(uIndexNext);
+
+      //Declaracion de Funcion
+      
+      if oFuncDirectory.oFunctions.contains_key(&name) {
+          panic!("Function '{}' already declared", name); // Validación
+      }      
+      
+      oVariableValueDirectory.SetKeySession(name.clone());
+      
+      // Como ahora se usara una funcion se cambia la sesion
+      oVariableValueDirectory.GenerateSession();
+
+            // Declaracion parametros y variables dentro de funcion
+      for (sName, oType) in v {        
+          if oFunctionInfo.oVariableDirectory.contains_key(&sName) {          
+              panic!("Variable '{}' already declared", sName); // Validación
+          }      
+
+          oFunctionInfo.GenerateVariable(oVariableValueDirectory, Context::Local, sName, *oType);
+      }
+      oFuncDirectory.oFunctions.insert(name,  oFunctionInfo);
+
+    }
+}
+
+
+FuncBody: () = {
+  <body:Body> "]" ";" => {
+    // Como ya acabo la sesion exportamos las tablas generamos y regresamo el stack
+    let oLocalTable = oVariableValueDirectory.ExportSession(true);
+    let oTempTable = oVariableValueDirectory.ExportSession(false);    
+    oFuncDirectory.ImportSession(oVariableValueDirectory.GetKeySession(), oLocalTable, oTempTable);
+    oVariableValueDirectory.GetSessionStack();
   }
 }
 
@@ -361,7 +430,9 @@ MASEXPRESIONES: Vec<Expression> = {
 
 // Expresion 
 Expresion: Expression = {
-    <lhs:EXP> <rel:TipoExp> => {match rel {
+    <lhs:EXP> <rel:TipoExp> => {
+      
+      match rel {
         Some((op, right)) => {
 
           
@@ -519,11 +590,16 @@ FactorSigno: Option<Operator> = {
 
 // Identificador o constante
 FactorValor: Expression = {
-    <id:"identifier"> => {
-      oQuadrupleList.InsertOperand(oFuncDirectory.oFunctions["main"].oVariableDirectory[&id]);
-      Expression::Identifier(id.to_string())},
-    <cte:CTE> => {
-       oQuadrupleList.InsertOperand(oFuncDirectory.oFunctions["main"].oVariableDirectory[&cte]);
+    <id:"identifier"> => {    
+      let sKeySession = oVariableValueDirectory.GetKeySession();
+      oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(sKeySession, id.clone()));      
+      
+      Expression::Identifier(id.to_string())
+      },
+    <cte:CTE> => {      
+      let sKeySession = "main".to_string();
+      oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(sKeySession, cte.clone()));      
+      
        Expression::Identifier(cte)
       },
 };

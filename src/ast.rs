@@ -32,7 +32,7 @@ pub enum Expression {
   Constant(Value),
 }
 
-#[derive(Copy,Debug, Clone)]
+#[derive(Copy,Debug,PartialEq, Clone)]
 #[repr(usize)]
 pub enum Context{
     Global = 10000,
@@ -62,7 +62,7 @@ pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),
-    Id(String),           
+    String(String),           
     None,             
 }
 
@@ -86,7 +86,7 @@ impl From<bool> for Value {
 
 impl From<String> for Value {
     fn from(val: String) -> Self {
-        Value::Id(val)
+        Value::String(val)
     }
 }
 
@@ -97,9 +97,8 @@ impl Value {
             Value::Int(_) => DataType::Int,
             Value::Float(_) => DataType::Float,
             Value::Bool(_) => DataType::Bool,
-            Value::Id(_) => {                
-                panic!("get_type: no se puede determinar tipo de un identificador sin tabla de símbolos");
-            }
+            Value::String(_) => DataType::String,
+            
             Value::None => {            
                 panic!("Tipo None no tiene tipo definido")
             }
@@ -113,6 +112,7 @@ pub enum DataType {
     Int = 0,
     Float = 4000,
     Bool = 8000,
+    String = 9000
 }
 impl DataType {
     pub fn DefaultValue(&self) -> Value {
@@ -120,17 +120,12 @@ impl DataType {
             DataType::Int => Value::Int(0),
             DataType::Float => Value::Float(0.0),
             DataType::Bool => Value::Bool(false),
+            DataType::String => Value::String("".to_string())
         }
     }
     pub fn GetTypeFromContext(uIndex: usize) -> DataType {
         let _uIndex = Context::getIndex(uIndex);
-        if ((_uIndex >= (DataType::Float as usize)) && (_uIndex < (DataType::Bool as usize)) ){
-            return DataType::Float;
-        }
-        else if(_uIndex > (DataType::Bool as usize)){
-            return DataType::Bool;
-        }
-        return DataType::Int;
+        return DataType::GetType(_uIndex)
     }
 
     pub fn GetType(uIndex: usize) -> DataType {
@@ -138,9 +133,12 @@ impl DataType {
         if ((_uIndex >= (DataType::Float as usize)) && (_uIndex < (DataType::Bool as usize)) ){
             return DataType::Float;
         }
-        else if(_uIndex >= (DataType::Bool as usize)){
+        else if(_uIndex >= (DataType::Bool as usize) && (_uIndex < (DataType::String as usize))){
             return DataType::Bool;
-        }        
+        }      
+        else if(_uIndex >= (DataType::String as usize)){
+            return  DataType::String;
+        }  
         return DataType::Int;
     }
 }
@@ -160,4 +158,8 @@ pub enum Operator {
     GotoV,
     Assign,
     Print,
+    Era,
+    GoSub,
+    Return,
+    FinishFunction
 }

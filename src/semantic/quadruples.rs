@@ -35,9 +35,6 @@ impl Quadruple{
 
 #[derive(Debug)]
 pub struct QuadrupleList {
-    //Tabla de Variables parecida a la directory para las funciones, pero aqui solo guarda temporales
-    //Usa la misma tabla de variables de memoria, y tambien se usa para guardar las constantes
-    oVariableTempTable: HashMap<String, usize>, // El usize minimo es el que esta en Variables: 4000
 
     //Stack de operadores
     oOperatorStack: Stack<Operator>,
@@ -48,22 +45,22 @@ pub struct QuadrupleList {
     //Stack de Variables y Constantes, solo guarda la memoria
     oJumpsStack: Stack<usize>,
 
+    //Stack de Variables y Constantes, solo guarda la memoria
+    oFunctionCallStack: Stack<String>,
+
     //Vector de cuadruplos, aqui se registraran todas las acciones
     oQuadruples: Vec<Quadruple>,
-
-    pub oContext: Context
 }
 
 impl QuadrupleList {
 
     pub fn new() -> Self {
         Self {
-            oVariableTempTable: HashMap::new(),
             oOperatorStack: Stack::new(),
             oOperandStack: Stack::new(),    
             oJumpsStack: Stack::new(),
-            oQuadruples: Vec::new(),
-            oContext: Context::Global // La lista de cuadruplos siempre iniciara en Global
+            oFunctionCallStack: Stack::new(),
+            oQuadruples: Vec::new(),            
         }
     }
 
@@ -86,6 +83,11 @@ impl QuadrupleList {
     pub fn InsertJump(&mut self, iQuadrupleIndex: usize){
         
         self.oJumpsStack.push(iQuadrupleIndex);
+    }
+
+    pub fn InsertFunctionCall(&mut self, sFunction: String){
+        
+        self.oFunctionCallStack.push(sFunction);
     }
 
     pub fn DeleteOperator(&mut self){
@@ -181,6 +183,45 @@ impl QuadrupleList {
                                                                      oResult // Variable donde se asignara el valor
                                                                 );
                     self.oQuadruples.push(oQuadrupleTemp);
+                }
+                Operator::Era => {
+                    let oOperator = self.oOperatorStack.pop().unwrap();
+                    let oPointer = self.oOperandStack.pop();
+                    match oPointer {
+                        Some(uPointer) => {
+                            let oQuadrupleTemp = Quadruple::new(oOperator, 
+                                                                    None, 
+                                                                    None,
+                                                                     oPointer // Punto donde se reasignara el punto de inicio
+                                                                );
+                            // TODO: Asignar parametros a funcion
+                            self.oQuadruples.push(oQuadrupleTemp);
+
+                            // Generar un cuadruplo para GoSub
+                            let oQuadrupleTemp = Quadruple::new(Operator::GoSub, 
+                                                                    None, 
+                                                                    None,
+                                                                     oPointer // Punto donde se reasignara el punto de inicio
+                                                                );
+                            
+                            self.oQuadruples.push(oQuadrupleTemp);
+                        }
+                        None => {
+                            panic!("Error, no pointer to function")
+                        }
+                    }
+                }
+                Operator::FinishFunction => {
+                    let oOperator = self.oOperatorStack.pop().unwrap();
+                    // Generar un cuadruplo para FinishFunction
+                    let oQuadrupleTemp = Quadruple::new(Operator::FinishFunction, 
+                                                            None, 
+                                                            None,
+                                                                None // Punto donde se reasignara el punto de inicio
+                                                        );
+                    
+                    self.oQuadruples.push(oQuadrupleTemp);
+
                 }
                   
                 _ => { // Para cualquier otro caso

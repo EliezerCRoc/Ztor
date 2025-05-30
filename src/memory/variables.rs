@@ -5,17 +5,20 @@ use crate::ast::{DataType, Operator, Value, Expression, Context};
 
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 
 pub struct VariableValueTable {    
     iIntCounter: usize,
     iFloatCounter: usize,
     iBoolCounter: usize,
+    iStringCounter: usize,
     //iTempCounter: usize,
 
     oIntVec: Vec<Option<Value>>,
     oFloatVec: Vec<Option<Value>>,
     oBoolVec: Vec<Option<Value>>,
+    oStringVec: Vec<Option<Value>>,
+
 
 
     //oValues: Vec<Option<Value>>,
@@ -29,10 +32,14 @@ impl VariableValueTable {
             iIntCounter: (DataType::Int as usize),
             iFloatCounter: (DataType::Float as usize),
             iBoolCounter: (DataType::Bool as usize),
+            iStringCounter: (DataType::String as usize),
+
 
             oIntVec: vec![],
             oFloatVec: vec![],
             oBoolVec: vec![],
+            oStringVec: vec![],
+
 
             //oValues: vec![None; 10000],
 
@@ -47,6 +54,8 @@ impl VariableValueTable {
             DataType::Int => {iIndex = self.iIntCounter;self.oIntVec.push( Some(oVal.into()));self.iIntCounter += 1; },
             DataType::Float => {iIndex = self.iFloatCounter;self.oFloatVec.push( Some(oVal.into()));self.iFloatCounter += 1;},
             DataType::Bool => { iIndex = self.iBoolCounter;self.oBoolVec.push( Some(oVal.into()));self.iBoolCounter += 1;},
+            DataType::String => { iIndex = self.iStringCounter;self.oStringVec.push( Some(oVal.into()));self.iStringCounter += 1;},
+
         }                       
         // self.oValues[iIndex] = Some(oVal.into());
         return iIndex;
@@ -59,16 +68,20 @@ impl VariableValueTable {
             DataType::Int=> {_uAddress = _uAddress - (DataType::Int as usize);self.oIntVec[_uAddress] = Some(oVal); },
             DataType::Float => {_uAddress = _uAddress - (DataType::Float as usize); self.oFloatVec[_uAddress] = Some(oVal);},
             DataType::Bool => {_uAddress = _uAddress - (DataType::Bool as usize);  self.oBoolVec[_uAddress] = Some(oVal);},
+            DataType::String => {_uAddress = _uAddress - (DataType::String as usize);  self.oStringVec[_uAddress] = Some(oVal);},
+
         }
         //self.oValues[uAddress] = Some(oVal);
     }
     pub fn get(&self, uAddress: usize) -> Option<&Value> {
         let mut _uAddress:usize = uAddress;                  
-
+        
         match DataType::GetType(_uAddress){
             DataType::Int => {_uAddress = _uAddress - (DataType::Int as usize);self.oIntVec.get(_uAddress)?.as_ref() },
             DataType::Float => {_uAddress = _uAddress - (DataType::Float as usize);self.oFloatVec.get(_uAddress)?.as_ref()},
             DataType::Bool => {_uAddress = _uAddress - (DataType::Bool as usize);self.oBoolVec.get(_uAddress)?.as_ref()},
+            DataType::String => {_uAddress = _uAddress - (DataType::String as usize);self.oStringVec.get(_uAddress)?.as_ref()},
+
         }
         //self.oValues.get(addr)?.as_ref() // Con el ? regresa None en los casos que no exista
     }
@@ -94,6 +107,10 @@ pub struct VariableValueDirectory {
     // Tablas actuales de sesion
     oLocalValueTable: VariableValueTable,
     oTempValueTable: VariableValueTable, // Siempre inicia con uno principal refiriendose a la tabla Global
+
+    bUseSession: bool,
+    sKeySession: String
+
 }
 
 impl VariableValueDirectory{
@@ -111,8 +128,11 @@ impl VariableValueDirectory{
             oTempDirectory: Stack::new(),
 
             oLocalValueTable: VariableValueTable::new(),
-            oTempValueTable: VariableValueTable::new()
+            oTempValueTable: VariableValueTable::new(),
 
+            //Como iniciamos en main no requerimos el uso de sesion
+            bUseSession: false,
+            sKeySession: String::new()
         }
     }
 
@@ -133,15 +153,22 @@ impl VariableValueDirectory{
     }
 
     pub fn generateVariable(&mut self, oContext: Context, oValue: Value, oType: DataType) -> Result<usize, String>{
- 
-        match oContext {
+        
+        let mut _oContext = oContext;
+        //Si la sesion esta activa y se quiere guardar en global, se pasa a local
+        // Global -> Local
+        if(self.bUseSession && _oContext == Context::Global){
+            _oContext = Context::Local;
+        }
+
+        match _oContext {
             Context::Global => {
                 return Ok(self.oGlobalTable.insert(oValue, oType) + self.uGlobalOffsize);
             },
             Context::Constant => {
                 return Ok(self.oConstantTable.insert(oValue, oType) + self.uConstantOffsize);
             },
-            Context::Local => {
+            Context::Local => {                
                 return Ok(self.oLocalValueTable.insert(oValue, oType) + self.uLocalOffsize);
             },
             Context::Temp => {
@@ -153,9 +180,7 @@ impl VariableValueDirectory{
         }
     }
 
-    pub fn setValue(&mut self, uIndex: &mut usize, oValue: Value) {
-                   
-
+    pub fn setValue(&mut self, uIndex: &mut usize, oValue: Value) {                
 
         match self.getTableType(*uIndex) {
             Context::Global => {
@@ -182,6 +207,7 @@ impl VariableValueDirectory{
     }
     
     pub fn getValue(&mut self, uIndex: &mut usize) -> Option<&Value> {
+
         let oResult: Option<&Value>;
 
 
@@ -210,13 +236,67 @@ impl VariableValueDirectory{
         }
         return oResult;
     }
-    // // Obtener session actual, saber si esta en Global, Local
-    // pub fn GetActualSession(&mut self) -> VariableValueTable{
-    //     // Si no se tiene nada en el directorio local es porque ya estamos en main
-    //     match self.oLocalDirectory.pop() {
-    //         Some(oVariableValueTable) => {return oVariableValueTable},
-    //         None => {return self.oGlobalTable}
-    //     };
+    
+    pub fn SetKeySession(&mut self, _sKeySession: String){
+        self.sKeySession = _sKeySession;
+    }
 
-    // }
+    pub fn GetKeySession(&mut self) -> String{
+        return self.sKeySession.clone();
+    }
+    pub fn setUseSession(&mut self){
+        self.bUseSession = !self.bUseSession;
+    }
+    
+    //Genera una nueva sesion
+    pub fn GenerateSession(&mut self){
+        if(!self.bUseSession) {            
+            self.setUseSession();
+        }
+        self.SaveSessionStack();
+    }
+
+    // Guarda la sesion que se estuviera usando actualmente en el stack 
+    pub fn SaveSessionStack(&mut self){
+        self.oLocalDirectory.push(self.oLocalValueTable.clone());
+        self.oTempDirectory.push(self.oTempValueTable.clone());
+
+        self.oLocalValueTable = VariableValueTable::new();
+        self.oTempValueTable = VariableValueTable::new();
+    }
+
+    //Obtener la sesion que se haya guardado en el stack
+    pub fn GetSessionStack(&mut self){
+        match self.oLocalDirectory.pop() {
+            Some(_oLocalTable) => {
+
+                    self.oLocalValueTable =_oLocalTable ;
+
+            }
+            _ => ()
+        }
+
+        match self.oTempDirectory.pop() {
+            Some(_oTempValueTable) => {
+                self.oTempValueTable =_oTempValueTable ;
+            }
+            _ => ()
+        }
+    }
+
+    // Importar sesion gnerada del directorio de funciones 
+    pub fn ImportSession(&mut self, _oLocalValueTable: VariableValueTable, _oTempValueTable: VariableValueTable) {
+        self.oLocalValueTable = _oLocalValueTable;
+        self.oTempValueTable = _oTempValueTable;
+    }
+
+    // Exportar sesion (normalmente se usa cuando recien se va a generar la funcion)    
+    pub fn ExportSession(&mut self, bOption: bool) -> VariableValueTable{
+        if(bOption) {
+            return self.oLocalValueTable.clone();
+        }
+        else {
+            return self.oTempValueTable.clone();
+        }
+    }
 }

@@ -2,6 +2,7 @@
 use crate::ast::{Value, Operator, Context};
 use crate::memory::{variables::{VariableValueDirectory}, directory::FunctionDirectory};
 use crate::semantic::quadruples::{Quadruple, QuadrupleList};
+use crate::utils::stack::Stack;
 
 
 
@@ -23,6 +24,7 @@ impl<'a> Executer<'a>{
     }
 
     pub fn executeQuadruple(&mut self){
+        let mut oCounterStack: Stack<usize> = Stack::new() ;
         let mut  uCounter:usize = 0;
         while uCounter < self.oQuadrupleList.getSize() {
             let oQuadruple:&Quadruple = &self.oQuadrupleList.getQuadruple(uCounter);
@@ -39,7 +41,6 @@ impl<'a> Executer<'a>{
               
 
                     let oArgValue2 = self.oVariableValueDirectory.getValue(&mut oArg2).unwrap().clone();
-
                     let oResult = match (oArgValue1, oArgValue2) {
                         (Value::Int(i1), Value::Int(i2)) => {
                             let r = match oQuadruple.iOperator {
@@ -102,18 +103,15 @@ impl<'a> Executer<'a>{
                 }
                 Operator::Print => {
                     
-                    let mut oResultAddress =  oQuadruple.oResult.expect("Missing Result address");
-                    
-                    let oResultValue = self.oVariableValueDirectory.getValue(&mut oResultAddress).unwrap().clone();
-                    println!("{:?}", oResultValue);
-                     
+                    let mut oResultAddress =  oQuadruple.oResult.expect("Missing Result address");                                        
+                    let oResultValue = self.oVariableValueDirectory.getValue(&mut oResultAddress).unwrap().clone();                    
+                    println!("{:?}",oResultValue);
                 }
                 Operator::Assign => {
                     let mut oValueAddress =  oQuadruple.oArg1.expect("Missing Value Assign address");                    
                     let mut oVariableResult =  oQuadruple.oResult.expect("Missing Variable address");
-                    let oValue = self.oVariableValueDirectory.getValue( &mut oValueAddress).unwrap().clone();
-                    
-                    self.oVariableValueDirectory.setValue(&mut oVariableResult, oValue);                    
+                    let oValue = self.oVariableValueDirectory.getValue( &mut oValueAddress).unwrap().clone();                    
+                    self.oVariableValueDirectory.setValue(&mut oVariableResult, oValue);       
                 }
                 Operator::GotoF => {
                     let mut oArg1Address =  oQuadruple.oArg1.expect("Missing Value address");                    
@@ -128,6 +126,32 @@ impl<'a> Executer<'a>{
                     let mut uNewCounter =  oQuadruple.oResult.expect("Missing Variable address");                    
                 
                     uCounter = uNewCounter;                    
+                }
+                Operator::Era => {
+                    let mut uFunctionRedirectAddress =  oQuadruple.oResult.expect("Missing Function address");                    
+                    let oFunctionRedirectValue = self.oVariableValueDirectory.getValue( &mut uFunctionRedirectAddress).unwrap().clone();
+                    
+                    let sFunction: String = match(oFunctionRedirectValue){
+                        Value::String(sFunctionName) => sFunctionName,
+                        _ => {panic!("Error Function not found in index");}
+                    } ;
+                    let mut uFunctionIndex: usize;
+                    self.oVariableValueDirectory.SaveSessionStack();
+                    if let Some(oFunctionInfo) = self.oFunctionDirectory.oFunctions.get_mut(&sFunction){
+                        self.oVariableValueDirectory.SetKeySession(sFunction);
+                        self.oVariableValueDirectory.ImportSession(oFunctionInfo.oLocalValueTable.clone(), oFunctionInfo.oTempValueTable.clone());
+                        self.oVariableValueDirectory.setUseSession();
+                        uFunctionIndex = oFunctionInfo.getStartPointer();
+
+                        oCounterStack.push(uCounter+1);
+                        uCounter = uFunctionIndex;                        
+
+                    }
+                }
+                Operator::FinishFunction => {
+                    //Recuperamos la sesion anterior
+                    self.oVariableValueDirectory.GetSessionStack();
+                    uCounter = oCounterStack.pop().unwrap().clone();
                 }
                 _ => {
 
