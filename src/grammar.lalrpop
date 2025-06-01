@@ -452,7 +452,7 @@ DecExpresion: () = {
 
 MASEXPRESIONES: ()= {
   => (),
-  "," <exp:DecExpresion> => {
+  "," <exp:DecExpresion> <rest:MASEXPRESIONES> => {
       ()
   }
 }

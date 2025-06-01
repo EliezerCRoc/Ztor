@@ -39,16 +39,21 @@ fn main() {
     let source_code = "    program prueba1;  
                             var a,b : int;
                             var c,d : float;
-                            void Factorial(n: int)[
-                            var iFactorialNum,i: int;                            
+                            void pelos(i: int)[{
+                                print(i);
+                            }];
+                            void Factorial(i:int, iFactorialNum: int, n: int)[               
                             {
-                                i = 1;
-                                iFactorialNum = 1;
-                                while(i < (n+1)) do {
+                                if(i < (n+1)) do {
                                     iFactorialNum = i * iFactorialNum;
                                     i = i + 1;
-                                };                                
-                                print(iFactorialNum);
+                                    Factorial(i, iFactorialNum, 10);
+
+                                }
+                                else {
+                                    pelos(iFactorialNum);
+                                };  
+
                                 
                             }];
 
@@ -68,9 +73,7 @@ fn main() {
 
                             main
                             {
-                                Factorial(10);
-                                Fibbonacci(1, 15);
-
+                                Factorial(1, 1, 10);                                
                             }
                             end";
 
