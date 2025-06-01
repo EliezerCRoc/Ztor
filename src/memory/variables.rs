@@ -104,12 +104,19 @@ pub struct VariableValueDirectory {
     oLocalDirectory: Stack<VariableValueTable>,
     oTempDirectory: Stack<VariableValueTable>,
 
+    // Tablas de anterior sesion
+    oLocalValueTableTemp: VariableValueTable,
+    oTempValueTableTemp: VariableValueTable,
+
+
     // Tablas actuales de sesion
     oLocalValueTable: VariableValueTable,
     oTempValueTable: VariableValueTable, // Siempre inicia con uno principal refiriendose a la tabla Global
 
     bUseSession: bool,
-    sKeySession: String
+    sKeySession: String,
+    //Esta variable solo se usa cuando se estan asignando parametros en la llamada de una funcion
+    bUseParameterTemp: bool
 
 }
 
@@ -127,12 +134,17 @@ impl VariableValueDirectory{
             oLocalDirectory: Stack::new(),
             oTempDirectory: Stack::new(),
 
+            oLocalValueTableTemp: VariableValueTable::new(),
+            oTempValueTableTemp: VariableValueTable::new(),
+
+
             oLocalValueTable: VariableValueTable::new(),
             oTempValueTable: VariableValueTable::new(),
 
             //Como iniciamos en main no requerimos el uso de sesion
             bUseSession: false,
-            sKeySession: String::new()
+            sKeySession: String::new(),
+            bUseParameterTemp: false
         }
     }
 
@@ -193,11 +205,20 @@ impl VariableValueDirectory{
             },
             Context::Local => {
                 *uIndex = *uIndex - self.uLocalOffsize;
+                if self.bUseParameterTemp{
+                    self.oLocalValueTableTemp.set(*uIndex,oValue);
+                    return;
+                }
                 self.oLocalValueTable.set(*uIndex,oValue);
             },
             Context::Temp => {
                 *uIndex = *uIndex - self.uTempOffsize;                
+                if self.bUseParameterTemp{
+                    self.oTempValueTableTemp.set(*uIndex,oValue);
+                    return;
+                }
                 self.oTempValueTable.set(*uIndex,oValue);
+
             },
             _ => {
                 panic!("Error: Inserting Value in Memory");
@@ -223,10 +244,18 @@ impl VariableValueDirectory{
             },
             Context::Local => {
                 *uIndex = *uIndex - self.uLocalOffsize;
+                if self.bUseParameterTemp{
+                    oResult = self.oLocalValueTableTemp.get(*uIndex);
+                    return oResult;
+                }
                 oResult = self.oLocalValueTable.get(*uIndex);
             },
             Context::Temp => {
                 *uIndex = *uIndex - self.uTempOffsize;
+                if self.bUseParameterTemp{
+                    oResult = self.oTempValueTable.get(*uIndex);
+                    return oResult;
+                }
                 oResult = self.oTempValueTable.get(*uIndex);
             },
             _ => {
@@ -237,6 +266,43 @@ impl VariableValueDirectory{
         return oResult;
     }
     
+    //Obtener valores de Sesion Anterior antes de ser guardado en Stack
+    pub fn getValueLastSession(&mut self, uIndex: &mut usize) -> Option<&Value> {
+
+        let oResult: Option<&Value>;
+
+
+        match self.getTableType(*uIndex) {
+            Context::Global => {
+
+                *uIndex = *uIndex - self.uGlobalOffsize;                
+                oResult = self.oGlobalTable.get(*uIndex);
+            },
+            Context::Constant => {
+                *uIndex = *uIndex - self.uConstantOffsize;
+                oResult = self.oConstantTable.get(*uIndex);
+            },
+            Context::Local => {
+                *uIndex = *uIndex - self.uLocalOffsize;
+                oResult = self.oLocalValueTableTemp.get(*uIndex);
+            },
+            Context::Temp => {
+                *uIndex = *uIndex - self.uTempOffsize;
+                oResult = self.oTempValueTableTemp.get(*uIndex);
+            },
+            _ => {
+                panic!("Error:Getting Value from Memory");
+            }
+
+        }
+        return oResult;
+    }
+
+    pub fn clearTemp(&mut self){
+        self.oLocalValueTableTemp = VariableValueTable::new();
+        self.oTempValueTableTemp = VariableValueTable::new();
+    }
+
     pub fn SetKeySession(&mut self, _sKeySession: String){
         self.sKeySession = _sKeySession;
     }
@@ -246,6 +312,10 @@ impl VariableValueDirectory{
     }
     pub fn setUseSession(&mut self){
         self.bUseSession = !self.bUseSession;
+    }
+
+    pub fn setUseParameter(&mut self){
+        self.bUseParameterTemp = !self.bUseParameterTemp;
     }
     
     //Genera una nueva sesion
@@ -260,6 +330,9 @@ impl VariableValueDirectory{
     pub fn SaveSessionStack(&mut self){
         self.oLocalDirectory.push(self.oLocalValueTable.clone());
         self.oTempDirectory.push(self.oTempValueTable.clone());
+
+        self.oLocalValueTableTemp = self.oLocalValueTable.clone();
+        self.oTempValueTableTemp = self.oTempValueTable.clone();
 
         self.oLocalValueTable = VariableValueTable::new();
         self.oTempValueTable = VariableValueTable::new();

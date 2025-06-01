@@ -161,5 +161,6 @@ pub enum Operator {
     Era,
     GoSub,
     Return,
-    FinishFunction
+    FinishFunction,
+    Param
 }

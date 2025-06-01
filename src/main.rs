@@ -39,34 +39,37 @@ fn main() {
     let source_code = "    program prueba1;  
                             var a,b : int;
                             var c,d : float;
-                            void a1(param1: int)[
-                            var j: int;
+                            void Factorial(n: int)[
+                            var iFactorialNum,i: int;                            
                             {
-                                j = 1000;
-                                print(j);
-                                a = 5;
-                                print(a);
-                                a2();
+                                i = 1;
+                                iFactorialNum = 1;
+                                while(i < (n+1)) do {
+                                    iFactorialNum = i * iFactorialNum;
+                                    i = i + 1;
+                                };                                
+                                print(iFactorialNum);
+                                
                             }];
-                            void a2(param1: int)[
-                            var j: int;
+
+                            void Fibbonacci(i:int, n: int)[
+                            var prev1,prev2,newFibo: int;                            
                             {
-                                print(j);
-                                a = 100;
-                                print(a);
+                                prev1 = 1;                            
+                                print(i);
+                                while(i < (n+1)) do {
+                                    newFibo = prev1 + prev2;
+                                    print(newFibo);
+                                    prev2 = prev1;
+                                    prev1 = newFibo;
+                                    i = i+1;
+                                };                                                                
                             }];
+
                             main
                             {
-
-                                a = 10;
-                                while((a*5) > (10/2)) do {
-                                    a = a - 1;
-                                    print(a);
-                                    
-                                };
-                                c = (2*5)/10;
-                                print(c);
-                                a1(a);
+                                Factorial(10);
+                                Fibbonacci(1, 15);
 
                             }
                             end";

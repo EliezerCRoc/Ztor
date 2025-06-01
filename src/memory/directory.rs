@@ -28,7 +28,15 @@ impl FunctionDirectory{
             panic!("Function  not found");
         }
     }
+    pub fn getParamVector(&mut self, sKeySession:String) -> Vec<String>{
+        if let Some(oFuncInfo) = self.oFunctions.get_mut(&sKeySession){   
 
+            return oFuncInfo.oParamVector.clone();            
+        }  
+        else{
+            panic!("Function  not found");
+        }
+    }
 
     pub fn getVariableIndex(&mut self, sKeySession:String, _sVarName: String) -> usize{
         
@@ -40,9 +48,13 @@ impl FunctionDirectory{
         }
         if let Some(oFuncInfo) = self.oFunctions.get_mut(&_sKeySession){   
             //Si la sesion no tiene la variable validar con global(main)
-            if !oFuncInfo.oVariableDirectory.contains_key(&_sVarName)  {                                           
+            if !oFuncInfo.oVariableDirectory.contains_key(&_sVarName) && !oFuncInfo.oParamDirectory.contains_key(&_sVarName)  {                                           
                 return self.getGlobalVariableIndex(_sVarName); 
             }      
+
+            if !oFuncInfo.oVariableDirectory.contains_key(&_sVarName) {
+                return oFuncInfo.oParamDirectory[&_sVarName];            
+            }
             return oFuncInfo.oVariableDirectory[&_sVarName];            
         }  
         else{
@@ -92,6 +104,8 @@ impl FunctionDirectory{
 pub struct FunctionInfo {
     pub sReturnType: String,
     pub uStartPointer: usize,
+    pub oParamVector: Vec<String>,
+    pub oParamDirectory: HashMap<String, usize>, // Tabla de Parametros (Nombre, Espacio Memoria)
     pub oVariableDirectory: HashMap<String, usize>, // Tabla de Variables (Nombre, Espacio Memoria)
     pub oLocalValueTable:  VariableValueTable,
     pub oTempValueTable:  VariableValueTable
@@ -102,6 +116,8 @@ impl FunctionInfo {
         Self {
             sReturnType: ReturnType,            
             uStartPointer: uIndex,
+            oParamVector: Vec::new(),
+            oParamDirectory: HashMap::new(),
             oVariableDirectory: HashMap::new(),
             oLocalValueTable: _oLocalValueTable,
 
@@ -122,6 +138,23 @@ impl FunctionInfo {
         self.uStartPointer = uIndex;
     }
 
+    pub fn GenerateParam(&mut self,  oVariableValueDirectory: &mut VariableValueDirectory, oContext: Context, sName: String, oType: DataType) -> bool {
+        if !self.oParamDirectory.contains_key(&sName) {
+            match oVariableValueDirectory.generateVariable(oContext,oType.DefaultValue(), oType) {
+                Ok(iIndex) => {
+
+                    self.oParamVector.insert(0,sName.clone());
+
+                    self.oParamDirectory.insert(sName, iIndex);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
+        else {
+            false
+        }
+    }
 
     pub fn GenerateVariable(&mut self,  oVariableValueDirectory: &mut VariableValueDirectory, oContext: Context, sName: String, oType: DataType) -> bool {
 
@@ -138,12 +171,25 @@ impl FunctionInfo {
         else {
             false
         }
-        // } else {
-        //     panic!("Variable already exists")
-        // }
     }
-    pub fn InsertVariable(&mut self,  oVariableValueDirectory: &mut VariableValueDirectory, oContext: Context, sName: String, oValue: Value,  oType: DataType) -> bool {
 
+    pub fn InsertParam(&mut self,  oVariableValueDirectory: &mut VariableValueDirectory, oContext: Context, sName: String, oValue: Value,  oType: DataType) -> bool {
+        if (self.oParamDirectory.get(&sName).is_none()){
+
+            match oVariableValueDirectory.generateVariable(oContext,oValue, oType) {
+                Ok(iIndex) => {
+                    self.oParamDirectory.insert(sName, iIndex);
+                    true
+                }
+                Err(_) => false,
+            }
+        }
+        else {
+            false
+        }
+    }
+
+    pub fn InsertVariable(&mut self,  oVariableValueDirectory: &mut VariableValueDirectory, oContext: Context, sName: String, oValue: Value,  oType: DataType) -> bool {
         if (self.oVariableDirectory.get(&sName).is_none()){
 
             match oVariableValueDirectory.generateVariable(oContext,oValue, oType) {
@@ -157,8 +203,5 @@ impl FunctionInfo {
         else {
             false
         }
-        // } else {
-        //     panic!("Variable already exists")
-        // }
     }
 }

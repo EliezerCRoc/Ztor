@@ -192,24 +192,49 @@ impl QuadrupleList {
                             let oQuadrupleTemp = Quadruple::new(oOperator, 
                                                                     None, 
                                                                     None,
-                                                                     oPointer // Punto donde se reasignara el punto de inicio
+                                                                     oPointer.clone() // Punto donde se reasignara el punto de inicio
                                                                 );
-                            // TODO: Asignar parametros a funcion
+
+
+
+                            //self.oOperandStack.push(uPointer);
+
                             self.oQuadruples.push(oQuadrupleTemp);
 
-                            // Generar un cuadruplo para GoSub
-                            let oQuadrupleTemp = Quadruple::new(Operator::GoSub, 
-                                                                    None, 
-                                                                    None,
-                                                                     oPointer // Punto donde se reasignara el punto de inicio
-                                                                );
-                            
-                            self.oQuadruples.push(oQuadrupleTemp);
+
                         }
                         None => {
                             panic!("Error, no pointer to function")
                         }
                     }
+                }
+                Operator::Param => {
+                    let oResult = self.oOperandStack.pop();
+
+                    let oVariable = self.oOperandStack.pop();
+
+                    let oOperator = self.oOperatorStack.pop().unwrap();
+
+                    let oQuadrupleTemp = Quadruple::new(oOperator, 
+                                                oResult, // Valor que sera asignado
+                                                None,
+                                                    oVariable // Variable donde se asignara el valor
+                                            );
+                    self.oQuadruples.push(oQuadrupleTemp);
+                }
+                Operator::GoSub => {
+                    let oOperator = self.oOperatorStack.pop().unwrap();
+
+                    let oPointer = self.oOperandStack.pop();
+
+                    // Generar un cuadruplo para GoSub
+                    let oQuadrupleTemp = Quadruple::new(oOperator, 
+                                                            None, 
+                                                            None,
+                                                                oPointer // Punto donde se reasignara el punto de inicio
+                                                        );
+                    
+                    self.oQuadruples.push(oQuadrupleTemp);
                 }
                 Operator::FinishFunction => {
                     let oOperator = self.oOperatorStack.pop().unwrap();

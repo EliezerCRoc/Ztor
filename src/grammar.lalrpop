@@ -149,7 +149,7 @@ DecStatement: Vec<String> = {
   <assign:Assign><ds:DecStatement> => vec![assign],
   <condition:Condition><ds:DecStatement> => vec![condition],
   <cycle:Cycle><ds:DecStatement> => vec![cycle],
-  <fCall:FCall><ds:DecStatement> => vec![],
+  <fCall:FCallComplete><ds:DecStatement> => vec![],
   <print:Print><ds:DecStatement> => vec![print]
 
 }
@@ -228,10 +228,19 @@ CycleCondition: String = {
   }
 }
 
+FCallComplete: () = {
+  <start:FCall> <end:FCallExpresion> => {
+
+  }
+
+}
+
 FCall: () = {
-  <id: "identifier"> "(" <de:DecExpresion> ")" ";"=> {
+  <id: "identifier"> => {
     oQuadrupleList.InsertOperator(Operator::Era);
-    let _key = oVariableValueDirectory.GetKeySession();
+    let _key = "main".to_string(); //oVariableValueDirectory.GetKeySession();
+
+    //Agregar variable String para identificar en parte de memoria esta el nombre de la funcion al momento de llamar
     oFuncDirectory.InsertVariable(&_key, 
                                     oVariableValueDirectory,
                                     Context::Constant, 
@@ -239,14 +248,30 @@ FCall: () = {
                                     Value::String(id.clone()),
                                     DataType::String
                                     );
-    oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(_key,id));
-    oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
-
-    // oQuadrupleList.InsertOperator(Operator::GoSub);
-    ()
-
+    oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(_key.clone(),id.clone()));
+    oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);    
+    oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(_key.clone(),id.clone()));
     
+    let oParametroVec = oFuncDirectory.getParamVector(id.clone());
+    
+    for oParametro in oParametroVec {       
+        oQuadrupleList.InsertOperand(oFuncDirectory.getVariableIndex(id.clone(),oParametro));
+    }                          
+    
+    ()
   }
+}
+
+FCallExpresion: () = {
+  "(" <de:DecParamExpresion> ")" ";" => {       
+      //Pusheamos Operador GoSub para generar el cuadruplo cuando acabe la funcion
+      oQuadrupleList.InsertOperator(Operator::GoSub);
+      
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
+
+    ()
+  }
+
 }
 
 Print: String = {
@@ -339,12 +364,6 @@ pub FuncHead: () = {
                                                 oVariableValueDirectory.ExportSession(true),
                                                 oVariableValueDirectory.ExportSession(false) 
                                               );
-      let mut v = Vec::new();
-      v.extend(params.clone().into_iter());
-      v.extend(vars.clone().into_iter());
-
-
-
       let uIndexNext = oQuadrupleList.getSize();
 
       oFunctionInfo.setStartPointer(uIndexNext);
@@ -360,9 +379,17 @@ pub FuncHead: () = {
       // Como ahora se usara una funcion se cambia la sesion
       oVariableValueDirectory.GenerateSession();
 
-            // Declaracion parametros y variables dentro de funcion
-      for (sName, oType) in v {        
-          if oFunctionInfo.oVariableDirectory.contains_key(&sName) {          
+      //Guardar Parametros de funcion
+      for (sName, oType) in params.clone().into_iter() {        
+          if oFunctionInfo.oVariableDirectory.contains_key(&sName) || oFunctionInfo.oParamDirectory.contains_key(&sName) {          
+              panic!("Variable '{}' already declared", sName); // Validación
+          }      
+
+          oFunctionInfo.GenerateParam(oVariableValueDirectory, Context::Local, sName, *oType);
+      }
+      // Declaracion parametros y variables dentro de funcion
+      for (sName, oType) in vars.clone().into_iter() {        
+          if oFunctionInfo.oVariableDirectory.contains_key(&sName) || oFunctionInfo.oParamDirectory.contains_key(&sName) {          
               panic!("Variable '{}' already declared", sName); // Validación
           }      
 
@@ -410,21 +437,23 @@ MASPARAMS: Vec<(String, Box<DataType>)> = {
   }
 }
 
-DecExpresion: Vec<Expression> = {
-  => vec![],
-  <exp:Expresion> <rest:MASEXPRESIONES> => {
-    let mut v = vec![exp];
-    v.extend(rest);
-    v
+//Solo se usa cuando se llama una funcion, para agregar cada parametro
+DecParamExpresion: () = {
+  => (),
+  <exp:DecExpresion> <rest:MASEXPRESIONES> => ()
+}
+
+DecExpresion: () = {
+  <exp:Expresion>  => {      
+      oQuadrupleList.InsertOperator(Operator::Param);
+      oQuadrupleList.GenerateQuadruple(oVariableValueDirectory);
   }
 }
 
-MASEXPRESIONES: Vec<Expression> = {
-  => vec![],
-  "," <exp:Expresion> <rest:MASEXPRESIONES> => {
-    let mut v = vec![exp];
-    v.extend(rest);
-    v
+MASEXPRESIONES: ()= {
+  => (),
+  "," <exp:DecExpresion> => {
+      ()
   }
 }
 
